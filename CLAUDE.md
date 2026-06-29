@@ -254,13 +254,13 @@ ALLOWED_ORIGINS=               # ex: https://creatorai.vercel.app,https://www.se
 - Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 - **URL de produção**: `https://creatoria-rm2g.onrender.com`
 - Env vars a definir no painel do Render: todas as variáveis do `.env` (exceto `NEXT_PUBLIC_*`)
-- `ALLOWED_ORIGINS`: `https://creator-h0wakwbna-andersonlcosta4-8923s-projects.vercel.app`
+- `ALLOWED_ORIGINS`: `https://creator-ia-iota.vercel.app`
 
 ### Frontend — Vercel
 - Arquivo de config: `frontend/vercel.json`
 - Framework: Next.js (auto-detectado)
 - Root directory no Vercel: `frontend`
-- **URL de produção**: `https://creator-h0wakwbna-andersonlcosta4-8923s-projects.vercel.app`
+- **URL de produção**: `https://creator-ia-iota.vercel.app`
 - Env vars configuradas no painel do Vercel:
   - `NEXT_PUBLIC_SUPABASE_URL` = `https://lirpdpfoyuifmleoladc.supabase.co`
   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (anon key do Supabase)
