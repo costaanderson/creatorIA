@@ -8,11 +8,13 @@ env_path = Path(__file__).parents[3] / ".env"
 if env_path.exists():
     load_dotenv(dotenv_path=env_path)
 
-SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL", "").strip()
+SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
-if not SUPABASE_URL or not SERVICE_ROLE_KEY:
-    raise RuntimeError("Supabase URL ou Service Role Key não configurados no .env")
+if not SUPABASE_URL:
+    raise RuntimeError("NEXT_PUBLIC_SUPABASE_URL não configurado nas variáveis de ambiente")
+if not SERVICE_ROLE_KEY:
+    raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY não configurado nas variáveis de ambiente")
 
 # Cliente de serviço (admin) usado no backend
 supabase: Client = create_client(SUPABASE_URL, SERVICE_ROLE_KEY)
