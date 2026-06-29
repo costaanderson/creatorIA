@@ -252,8 +252,9 @@ ALLOWED_ORIGINS=               # ex: https://creatorai.vercel.app,https://www.se
 - Runtime: Python, `rootDir: backend`
 - Build: `pip install -r requirements.txt` (lê `backend/requirements.txt`)
 - Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **URL de produção**: `https://creatoria-rm2g.onrender.com`
 - Env vars a definir no painel do Render: todas as variáveis do `.env` (exceto `NEXT_PUBLIC_*`)
-- `ALLOWED_ORIGINS`: colocar a URL do Vercel (ex: `https://creatorai.vercel.app`)
+- `ALLOWED_ORIGINS`: colocar a URL do Vercel após o deploy do frontend
 
 ### Frontend — Vercel
 - Arquivo de config: `frontend/vercel.json`
