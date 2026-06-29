@@ -1,0 +1,236 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tabBtn {
+  padding: 0.5rem 1rem;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.tabBtn:hover {
+  border-color: #a5b4fc;
+  color: #4f46e5;
+}
+
+.tabBtnActive {
+  border-color: #6366f1;
+  background: #f5f3ff;
+  color: #4f46e5;
+  font-weight: 600;
+}
+
+/* ── Feed mock ──────────────────────────────────────────────── */
+.feedMock {
+  max-width: 400px;
+  margin: 0 auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  font-size: 0.875rem;
+}
+
+.feedHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+}
+
+.feedAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6);
+  flex-shrink: 0;
+}
+
+.feedUsername {
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: #111827;
+}
+
+/* 1:1 image area */
+.feedImageWrapper {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: #e5e7eb;
+}
+
+.feedImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.feedImagePlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e5e7eb;
+}
+
+.feedImagePlaceholderText {
+  font-size: 0.875rem;
+  color: #9ca3af;
+}
+
+/* Carousel dots */
+.carouselDots {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 0 2px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d1d5db;
+  display: inline-block;
+}
+
+.dotActive {
+  background: #3b82f6;
+}
+
+/* Actions */
+.feedActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem 0.25rem;
+}
+
+.feedActionsLeft {
+  display: flex;
+  gap: 0.625rem;
+}
+
+.feedIcon {
+  font-size: 1.375rem;
+  cursor: default;
+  line-height: 1;
+}
+
+/* Caption */
+.feedCaption {
+  padding: 0.375rem 0.75rem 0.75rem;
+  font-size: 0.8125rem;
+  color: #111827;
+  line-height: 1.5;
+}
+
+.feedCaptionUsername {
+  font-weight: 700;
+}
+
+/* ── Reels mock ─────────────────────────────────────────────── */
+.reelsMockWrapper {
+  display: flex;
+  justify-content: center;
+}
+
+.reelsMock {
+  position: relative;
+  width: 240px;
+  aspect-ratio: 9 / 16;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+}
+
+.reelsImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.reelsPlaceholder {
+  position: absolute;
+  inset: 0;
+  background: #111827;
+}
+
+.playOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.playIcon {
+  font-size: 2.5rem;
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.reelsActions {
+  position: absolute;
+  right: 10px;
+  bottom: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  align-items: center;
+}
+
+.reelsActionIcon {
+  font-size: 1.375rem;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.7));
+  cursor: default;
+  line-height: 1;
+}
+
+.reelsBottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 2rem 0.875rem 1rem;
+  background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.reelsUsername {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.reelsCaption {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

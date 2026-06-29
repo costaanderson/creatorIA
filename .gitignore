@@ -1,0 +1,25 @@
+# Credenciais — NUNCA subir
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Next.js
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: creatorai-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: META_CLIENT_ID
+        sync: false
+      - key: META_CLIENT_SECRET
+        sync: false
+      - key: META_REDIRECT_URI
+        sync: false
+      - key: META_API_VERSION
+        value: v19.0
+      - key: INSTAGRAM_ACCESS_TOKEN
+        sync: false
+      - key: INSTAGRAM_BUSINESS_ID
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: MVP_USER_ID
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
