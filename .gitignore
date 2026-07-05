@@ -23,3 +23,12 @@ frontend/out/
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code / ferramentas locais
+.claude/
+.agents/
+.mcp.json
+skills-lock.json
+
+# Build artifacts
+frontend/tsconfig.tsbuildinfo
