@@ -102,16 +102,21 @@ export default function Home() {
     setActionError(null);
     try {
       await deleteContent(projectId);
-      setListState((prev) =>
-        prev.status === 'ready'
-          ? { ...prev, projects: prev.projects.filter((p) => p.id !== projectId) }
-          : prev
-      );
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'Erro ao excluir o projeto. Tente novamente.');
-    } finally {
-      setDeletingId(null);
+      // 404 = projeto já não existe no banco; trata como sucesso e remove da lista
+      if (!(err instanceof ApiError && err.status === 404)) {
+        setActionError(err instanceof ApiError ? err.message : 'Erro ao excluir o projeto. Tente novamente.');
+        setDeletingId(null);
+        return;
+      }
     }
+    // Remove da lista independentemente (sucesso real ou já inexistente)
+    setListState((prev) =>
+      prev.status === 'ready'
+        ? { ...prev, projects: prev.projects.filter((p) => p.id !== projectId) }
+        : prev
+    );
+    setDeletingId(null);
   };
 
   const activeProjects = listState.status === 'ready' ? listState.projects.filter((p) => p.status !== 'archived') : [];
