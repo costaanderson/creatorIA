@@ -14,10 +14,11 @@ Aplicação fullstack single-user que permite a criadores de conteúdo gerar e p
 
 ### Proposta de valor
 
-- Criar posts únicos ou carrosséis em poucos segundos
+- Criar posts únicos, carrosséis ou Reels em poucos segundos
+- Gerar imagens automaticamente por slide via DALL-E 3 a partir do prompt visual gerado pela IA
 - Garantir consistência visual com a identidade da marca via Brand Kit
 - Reduzir esforço manual de design, copywriting e publicação
-- Publicar diretamente no Instagram após revisão do usuário
+- Publicar diretamente no Instagram (feed e Reels) após revisão do usuário
 
 ---
 
@@ -27,10 +28,12 @@ Aplicação fullstack single-user que permite a criadores de conteúdo gerar e p
 - Conexão com perfil profissional do Instagram via Meta Graph API (OAuth)
 - Configuração manual de Brand Kit (cor primária, logo, tom de voz)
 - Upload de identidade visual com extração inteligente via IA
-- Geração de conteúdo visual: post único e carrossel (2–10 slides)
+- Geração de conteúdo visual: post único, carrossel (2–10 slides) e Reel (3–6 cenas)
 - Geração automática de legenda e hashtags segmentadas por alcance
+- Geração de imagens por slide via DALL-E 3 a partir do visual_prompt
+- Upload de vídeo para publicação de Reels (MP4/MOV ≤ 100 MB)
 - Preview e edição antes da publicação
-- Publicação direta no Instagram com um clique
+- Publicação direta no Instagram (feed e Reels) com um clique
 
 ### Fora do MVP
 Multi-contas, gestão de clientes, agendamento, analytics, biblioteca de templates, aprovação colaborativa.
@@ -47,9 +50,12 @@ Multi-contas, gestão de clientes, agendamento, analytics, biblioteca de templat
 ### Épico 2 — Criação de Conteúdo com IA
 - **US-04** Gerar post único ou carrossel a partir de um tema → respeitar Brand Kit e tom de voz
 - **US-05** Gerar legenda (até 2.200 chars) e ≥10 hashtags por nicho/alcance
+- **US-07** Gerar roteiro de Reel (3–6 cenas com hook, desenvolvimento e CTA) → script + direção de câmera por cena
+- **US-08** Gerar imagem por slide via DALL-E 3 a partir do visual_prompt → persiste no Supabase Storage
 
 ### Épico 3 — Publicação Direct-to-Instagram
-- **US-06** Publicar via Meta API com indicador de progresso → retornar link do post publicado
+- **US-06** Publicar post único ou carrossel via Meta API → retornar link do post publicado
+- **US-09** Publicar Reel via Meta API (upload de vídeo MP4/MOV, polling até 5 min) → retornar link do Reel
 
 ---
 
@@ -61,11 +67,12 @@ Backend:   Python + FastAPI
 Banco:     Supabase Postgres
 Storage:   Supabase Storage (buckets: brand-assets, content-media)
 IA:        OpenAI — provedor ativo do projeto (OPENAI_API_KEY)
-             gpt-4o  → geração de texto, legendas, hashtags
-             gpt-4o  → extração de identidade visual (imagens/PDFs)
+             gpt-4o      → geração de texto, legendas, hashtags, roteiro de Reel
+             gpt-4o      → extração de identidade visual (imagens/PDFs)
+             dall-e-3    → geração de imagens por slide a partir do visual_prompt
            SDK: pacote openai>=1.0 com base_url="https://api.openai.com/v1"
 Social:    Meta Graph API / Instagram API
-Deploy:    Vercel (frontend) | Render / Railway / Fly.io (backend)
+Deploy:    Vercel (frontend) | Render (backend)
 ```
 
 ---
@@ -85,7 +92,7 @@ CreatorAI/
 │       ├── api/routes/        # instagram_auth ✅ | brand_kit ✅ | content ✅ | publish ✅
 │       ├── core/              # config.py ✅ | security.py ✅
 │       ├── models/            # schemas.py ✅ (auth + brand kit + content + publish)
-│       ├── services/          # meta ✅ | supabase ✅ | brand_extraction_service ✅ | ai_service ✅ | publishing_service ✅
+│       ├── services/          # meta ✅ | supabase ✅ | brand_extraction_service ✅ | ai_service ✅ | publishing_service ✅ | image_service ✅
 │       ├── sql/               # fase3_content.sql ✅
 │       └── utils/             # file_validation.py ✅
 ├── render.yaml                # Deploy config — Render (backend)
@@ -121,20 +128,24 @@ POST /brand-kit/upload             # upload de identidade visual (multipart/form
 ### Implementados — Fase 3 (Conteúdo) ✅
 
 ```
-POST /content/generate             # gera post único ou carrossel via OpenAI gpt-4o
-GET  /content                      # lista todos os projetos do usuário
-GET  /content/{id}                 # retorna projeto completo com slides
-PATCH /content/{id}                # edita caption, hashtags e slides
-POST /content/upload-image         # upload de imagem para bucket content-media (multipart)
+POST /content/generate                              # gera post único, carrossel ou reel via OpenAI gpt-4o
+GET  /content                                       # lista todos os projetos do usuário
+GET  /content/{id}                                  # retorna projeto completo com slides
+PATCH /content/{id}                                 # edita caption, hashtags e slides
+POST /content/upload-image                          # upload de imagem para bucket content-media (multipart)
+POST /content/upload-video                          # upload de vídeo MP4/MOV ≤ 100 MB (para Reels)
+POST /content/{id}/slides/{slide_id}/generate-image # gera imagem via DALL-E 3 → salva no Supabase → atualiza media_url
 ```
 
 ### Implementados — Fase 4 (Publicação) ✅
 
 ```
-POST /instagram/publish/{project_id}   # publica post único ou carrossel via INSTAGRAM_ACCESS_TOKEN do .env
+POST /instagram/publish/{project_id}   # publica post único, carrossel ou reel via INSTAGRAM_ACCESS_TOKEN do .env
 ```
 
-> Publicação usa token direto do `.env` (sem OAuth). O usuário fornece image_urls públicas no body.
+> Publicação usa token direto do `.env` (sem OAuth).
+> - Post único/carrossel: `image_urls` no body (ou `media_url` dos slides).
+> - Reel: `video_url` no body + `cover_url` opcional.
 
 ---
 
@@ -147,7 +158,7 @@ Nomes reais das tabelas — use estes nomes em todo código novo. A tabela `user
 | `instagram_connections` | ✅ existe | user_id, instagram_handle, instagram_user_id, access_token_encrypted, token_expires_at, status |
 | `brand_kits` | ✅ existe (Fase 2) | user_id, primary_color (varchar HEX), secondary_colors (jsonb), logo_url, tone_of_voice, visual_style, typography_suggestion, layout_patterns (jsonb), source (manual\|ai_extracted) |
 | `brand_assets` | ✅ existe (Fase 2) | user_id, brand_kit_id (fk), file_name, file_type, storage_path, storage_url, extracted_metadata (jsonb) |
-| `content_projects` | ✅ existe (Fase 3) | user_id, type (single_post\|carousel), theme, slides_count, status (draft\|approved\|publishing\|published\|failed), caption, hashtags (jsonb), instagram_post_url, error_message |
+| `content_projects` | ✅ existe (Fase 3) | user_id, type (single_post\|carousel\|reel), theme, slides_count, status (draft\|approved\|publishing\|published\|failed), caption, hashtags (jsonb), instagram_post_url, error_message |
 | `content_slides` | ✅ existe (Fase 3) | content_id (fk → content_projects), slide_order, title, body, visual_prompt, media_url |
 
 > Os schemas DDL completos (CREATE TABLE com índices) estão na **seção 7 do SDD.md**.
@@ -192,9 +203,14 @@ pip freeze > requirements.txt
 - **IA — provedor ativo**: OpenAI (`gpt-4o`). O cliente é instanciado via pacote `openai` com `base_url="https://api.openai.com/v1"` e `api_key=OPENAI_API_KEY`.
 - **CORS**: usa `ALLOWED_ORIGINS` env var (lista separada por vírgula). Padrão local: `http://localhost:3000,http://127.0.0.1:3000`. Em produção: definir no Render com a URL do Vercel.
 - **Publicação Instagram**: usa `INSTAGRAM_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ID` direto do `.env` (sem OAuth interativo). O mesmo token usado pelos scripts legados `publicar_agora.py` / `publish_instagram.py`.
-- **Upload de imagens de conteúdo**: `POST /content/upload-image` aceita JPEG/PNG/WebP ≤ 10 MB, salva no bucket `content-media` (público), retorna URL pública.
+- **Upload de imagens de conteúdo**: `POST /content/upload-image` aceita JPEG/PNG/WebP ≤ 10 MB, salva no bucket `content-media`, retorna URL pública.
+- **Upload de vídeo**: `POST /content/upload-video` aceita MP4/MOV ≤ 100 MB, salva em `content-media/videos/`, retorna URL pública usada na publicação de Reels.
+- **Geração de imagem por slide**: `POST /content/{id}/slides/{slide_id}/generate-image` — chama DALL-E 3 com o `visual_prompt` do slide, persiste em `content-media/generated/`, atualiza `media_url` no banco.
+- **Reel**: `content_type = "reel"` gera roteiro com N cenas (3–6). Cada cena tem `title` (nome da cena), `body` (script/o que falar), `visual_prompt` (direção de câmera). Publicação usa `media_type=REELS` na Meta API com polling de até 5 minutos.
 - **Edição de conteúdo**: `PATCH /content/{id}` permite atualizar caption, hashtags e campos de cada slide (title, body, visual_prompt) antes da publicação.
-- **requirements.txt**: apenas `backend/requirements.txt` (11 linhas, versões sem pin) é usado no deploy. O arquivo `requirements.txt` na raiz é um pip freeze de referência local — NÃO é lido pelo Render.
+- **Async publishing**: `publishing_service.py` é totalmente async (`asyncio.sleep` + `httpx.AsyncClient`) — não bloqueia o event loop do FastAPI.
+- **Validação no startup**: `main.py` verifica `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TOKEN_ENCRYPTION_KEY` e `NEXT_PUBLIC_SUPABASE_URL` ao iniciar — falha imediatamente com mensagem clara se alguma estiver ausente.
+- **requirements.txt**: apenas `backend/requirements.txt` é usado no deploy. O arquivo `requirements.txt` na raiz é um pip freeze de referência local — NÃO é lido pelo Render.
 - **BUG-01 corrigido**: `lib/supabaseClient.ts` criado na Fase 2.
 - **BUG-02 corrigido**: `index.tsx` saneado na Fase 2 — chamada para `/content/` inexistente removida.
 
@@ -298,6 +314,7 @@ ALLOWED_ORIGINS=               # ex: https://creatorai.vercel.app,https://www.se
 | Fase 2 — Brand Kit | Tabelas `brand_kits`/`brand_assets`, buckets, endpoints `/brand-kit`, extração via OpenAI Vision | ✅ Concluída (backend + frontend) |
 | Fase 3 — Geração de Conteúdo | Tabelas `content_projects`/`content_slides`, endpoints `/content/*`, pipeline OpenAI | ✅ Concluída (backend + frontend) |
 | Fase 4 — Publicação | `POST /instagram/publish/{id}`, token direto do `.env`, botão no frontend | ✅ Concluída |
+| Fase 5 — Qualidade + Reels + Imagens | Correções de performance (async, N+1, singleton), suporte a Reel, DALL-E 3 por slide | ✅ Concluída |
 
 ---
 
@@ -373,3 +390,31 @@ ALLOWED_ORIGINS=               # ex: https://creatorai.vercel.app,https://www.se
 
 - [x] Botão "Publicar no Instagram" no `ContentPreview` com estados: idle → aguardando URLs → publicando → sucesso/erro
 - [x] Link para o post publicado exibido após sucesso
+
+---
+
+## Fase 5 (Qualidade + Reels + Imagens) — Concluída ✅
+
+### Correções de qualidade ✅
+
+- [x] `publishing_service.py` convertido para async (`asyncio.sleep` + `httpx.AsyncClient`) — elimina bloqueio do event loop
+- [x] N+1 queries em `list_projects` corrigido: 2 queries fixas via `.in_()` + agrupamento em memória
+- [x] Chamada órfã `_get_ig_handle()` removida de `publish_single_post`
+- [x] Cliente OpenAI transformado em singleton em `ai_service.py`
+- [x] Validação de env vars obrigatórias no evento `startup` do FastAPI (`main.py`)
+- [x] Comentários desatualizados (Grok-3/xAI) corrigidos para gpt-4o/OpenAI
+
+### Suporte a Reels ✅
+
+- [x] `content_type = "reel"` adicionado ao schema `ContentGenerateRequest`
+- [x] Prompt de roteiro de Reel em `ai_service.py`: hook + N cenas + CTA, com script e direção de câmera
+- [x] `publish_reel()` em `publishing_service.py`: `media_type=REELS`, polling de até 5 min (`_MAX_POLL_VIDEO = 60`)
+- [x] `POST /content/upload-video`: aceita MP4/MOV ≤ 100 MB
+- [x] `publish.py`: roteamento por tipo (single_post / carousel / reel)
+- [x] Frontend: botão Reel no `ContentGeneratorForm`, slider de cenas (3–6), upload de vídeo no fluxo de publicação
+
+### Geração de imagens (DALL-E 3) ✅
+
+- [x] `services/image_service.py`: chama DALL-E 3, baixa URL temporária, persiste em `content-media/generated/`
+- [x] `POST /content/{id}/slides/{slide_id}/generate-image`: gera imagem e atualiza `media_url` do slide
+- [x] Frontend: botão "✨ Gerar imagem com IA" por slide no `ContentPreview`; exibe imagem gerada inline

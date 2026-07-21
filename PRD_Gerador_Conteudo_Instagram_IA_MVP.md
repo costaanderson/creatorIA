@@ -8,10 +8,11 @@ Criar uma aplicação que permita a criadores de conteúdo gerar e publicar post
 
 ### Proposta de Valor
 
-- Criar posts únicos ou carrosséis em poucos segundos.
+- Criar posts únicos, carrosséis ou Reels em poucos segundos.
+- Gerar imagens automaticamente por slide via IA (DALL-E 3) a partir do prompt visual gerado.
 - Garantir consistência visual com a identidade da marca.
 - Reduzir esforço manual de design, copywriting e publicação.
-- Permitir publicação direta no Instagram após revisão do usuário.
+- Permitir publicação direta no Instagram (feed e Reels) após revisão do usuário.
 
 ### Persona
 
@@ -34,12 +35,14 @@ Perfil:
 - Conexão com perfil profissional do Instagram via Meta API.
 - Configuração manual de Brand Kit.
 - Upload de identidade visual com extração inteligente via IA.
-- Geração de conteúdo visual em dois formatos:
+- Geração de conteúdo visual em três formatos:
   - Post único.
-  - Carrossel estruturado.
+  - Carrossel estruturado (2–10 slides).
+  - Reel com roteiro por cenas (3–6 cenas).
+- Geração automática de imagem por slide via DALL-E 3.
 - Geração automática de legenda e hashtags.
 - Preview e edição antes da publicação.
-- Publicação direta no Instagram.
+- Publicação direta no Instagram (feed e Reels).
 
 ### Fora do Escopo do MVP
 
@@ -123,10 +126,10 @@ eu quero fazer upload dos materiais da minha identidade visual,
 
 ## Épico 2 — Criação de Conteúdo com IA
 
-### US-04 — Gerar Conteúdo Visual: Post Único ou Carrossel
+### US-04 — Gerar Conteúdo Visual: Post Único, Carrossel ou Reel
 
 **Como criador de conteúdo,**  
-eu quero gerar posts únicos ou carrosséis a partir de um tema,  
+eu quero gerar posts únicos, carrosséis ou Reels a partir de um tema,  
 **para que eu possa criar diferentes formatos de conteúdo para o Instagram com IA.**
 
 #### Critérios de Aceite
@@ -134,23 +137,46 @@ eu quero gerar posts únicos ou carrosséis a partir de um tema,
 - O usuário deve informar um tema em texto.
 - O usuário deve escolher o formato do conteúdo:
   - Post único.
-  - Carrossel.
-- Para post único, o sistema deve gerar:
-  - Título.
-  - Texto principal.
-  - Sugestão visual.
-- Para carrossel, o usuário deve definir a quantidade de slides entre 2 e 10.
-- Para carrossel, a IA deve gerar:
-  - Título por slide.
-  - Texto de apoio por slide.
-  - Estrutura narrativa entre os slides.
-- O conteúdo deve respeitar:
-  - Brand Kit.
-  - Tom de voz.
-  - Identidade visual extraída.
-- O sistema deve apresentar preview do conteúdo gerado.
-- No caso de carrossel, o preview deve permitir navegação em formato swipe.
-- O usuário deve conseguir editar o texto de qualquer slide ou do post único antes de aprovar.
+  - Carrossel (2–10 slides).
+  - Reel (3–6 cenas).
+- Para post único, o sistema deve gerar: título, texto principal e prompt visual.
+- Para carrossel, a IA deve gerar por slide: título, texto de apoio e prompt visual.
+- Para Reel, a IA deve gerar por cena: nome da cena (hook/desenvolvimento/CTA), roteiro/script e direção de câmera.
+- O conteúdo deve respeitar Brand Kit e tom de voz.
+- O sistema deve apresentar preview do conteúdo gerado com navegação entre slides/cenas.
+- O usuário deve conseguir editar qualquer campo antes de aprovar.
+
+---
+
+### US-07 — Gerar Imagem por Slide via DALL-E 3
+
+**Como criador de conteúdo,**  
+eu quero gerar a imagem de cada slide com um clique,  
+**para que eu não precise criar ou buscar imagens manualmente.**
+
+#### Critérios de Aceite
+
+- Cada slide com `visual_prompt` deve exibir o botão "Gerar imagem com IA".
+- Ao clicar, o sistema envia o `visual_prompt` para o DALL-E 3 (1024×1024, proporção 1:1).
+- A imagem gerada é salva permanentemente no Supabase Storage e vinculada ao slide.
+- A imagem é exibida imediatamente no preview após geração.
+- Em caso de falha na API, o sistema exibe mensagem de erro clara.
+
+---
+
+### US-08 — Criar e Publicar Reel
+
+**Como criador de conteúdo,**  
+eu quero criar um roteiro de Reel e publicá-lo no Instagram,  
+**para que eu possa produzir conteúdo em vídeo com apoio de IA.**
+
+#### Critérios de Aceite
+
+- O usuário escolhe o tipo "Reel" e define o número de cenas (3–6).
+- A IA gera: legenda, hashtags e roteiro completo por cena (script + direção).
+- O usuário pode fazer upload do vídeo gravado (MP4 ou MOV, máx. 100 MB).
+- Ao publicar, o sistema envia o vídeo para a Meta Graph API com `media_type=REELS`.
+- O sistema aguarda o processamento (até 5 minutos de polling) e retorna o link do Reel publicado.
 
 ---
 
@@ -211,14 +237,14 @@ eu quero publicar o material gerado diretamente no Instagram com um clique,
 7. Usuário escolhe o formato:
    - Post único.
    - Carrossel.
-8. Sistema gera o conteúdo visual e textual.
-9. Usuário visualiza o preview.
-10. Usuário edita textos, se necessário.
-11. Sistema gera legenda e hashtags.
-12. Usuário revisa e aprova.
-13. Usuário clica em **Publicar Agora**.
-14. Sistema publica via Meta API.
-15. Sistema exibe confirmação e link do post publicado.
+   - Reel.
+8. Sistema gera o conteúdo textual (slides/cenas, legenda, hashtags).
+9. Usuário visualiza o preview e edita textos, se necessário.
+10. Usuário clica em "Gerar imagem com IA" por slide (opcional, DALL-E 3).
+11. Para Reel: usuário grava e faz upload do vídeo (MP4/MOV).
+12. Usuário clica em **Publicar Agora**.
+13. Sistema publica via Meta API (feed ou Reel).
+14. Sistema exibe confirmação e link do post publicado.
 
 ---
 
@@ -260,22 +286,26 @@ Responsabilidades:
 #### Endpoints sugeridos
 
 ```txt
-POST /auth/instagram/connect
-POST /auth/instagram/callback
+GET  /auth/instagram/connect
+GET  /auth/instagram/callback
 POST /auth/instagram/disconnect
 GET  /auth/instagram/status
 
-POST /brand-kit/upload
-POST /brand-kit/manual
 GET  /brand-kit
-PUT  /brand-kit
+POST /brand-kit
+POST /brand-kit/upload
 
 POST /content/generate
-PUT  /content/{content_id}/slides/{slide_id}
-POST /content/{content_id}/caption
+GET  /content
+GET  /content/{id}
+PATCH /content/{id}
+POST /content/upload-image
+POST /content/upload-video
+POST /content/{id}/slides/{slide_id}/generate-image
 
-POST /instagram/publish
-GET  /instagram/publication-status/{publication_id}
+POST /instagram/publish/{project_id}
+
+GET  /health
 ```
 
 ---
@@ -299,12 +329,11 @@ Responsabilidades:
 
 Responsabilidades:
 
-- Gerar estrutura textual de posts e carrosséis.
-- Gerar legendas.
-- Sugerir hashtags.
-- Analisar arquivos de identidade visual.
-- Extrair paleta de cores e padrões visuais.
-- Adaptar conteúdo ao tom de voz configurado.
+- Gerar estrutura textual de posts, carrosséis e Reels (gpt-4o).
+- Gerar legendas e hashtags (gpt-4o).
+- Analisar arquivos de identidade visual e extrair paleta, estilo e tipografia (gpt-4o Vision).
+- Gerar imagens por slide a partir do visual_prompt (DALL-E 3, 1024×1024).
+- Adaptar conteúdo ao tom de voz e Brand Kit configurados.
 
 ---
 
@@ -359,19 +388,22 @@ Responsabilidades:
 | created_at | timestamp | Data de criação |
 | updated_at | timestamp | Data de atualização |
 
-### generated_contents
+### content_projects
 
 | Campo | Tipo | Descrição |
 |---|---|---|
 | id | uuid | Identificador do conteúdo |
 | user_id | uuid | Usuário dono |
-| content_type | text | single_post/carousel |
+| type | text | single_post / carousel / reel |
 | theme | text | Tema informado |
-| status | text | draft/generated/approved/published/error |
+| slides_count | integer | Número de slides/cenas |
+| status | text | draft / approved / publishing / published / failed |
 | caption | text | Legenda gerada |
 | hashtags | jsonb | Hashtags sugeridas |
-| publication_url | text | Link do post publicado |
+| instagram_post_url | text | Link do post publicado |
+| error_message | text | Mensagem de erro, se houver |
 | created_at | timestamp | Data de criação |
+| updated_at | timestamp | Data de atualização |
 
 ### content_slides
 
@@ -470,14 +502,14 @@ Publicar diretamente no Instagram reduz fricção e fecha o ciclo completo: idei
 ## 11. Stack Recomendada
 
 ```txt
-Frontend: Next.js / React
+Frontend: Next.js / React (TypeScript, Pages Router)
 Backend: Python + FastAPI
 Banco de Dados: Supabase Postgres
-Storage: Supabase Storage
-IA: OpenAI ou modelo multimodal equivalente
+Storage: Supabase Storage (buckets: brand-assets, content-media)
+IA: OpenAI — gpt-4o (texto + visão) + dall-e-3 (geração de imagens)
 Integração Social: Meta Graph API / Instagram API
 Deploy Frontend: Vercel
-Deploy Backend: Render, Railway, Fly.io ou Google Cloud Run
+Deploy Backend: Render
 ```
 
 ---

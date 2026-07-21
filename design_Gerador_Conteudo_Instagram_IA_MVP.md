@@ -9,9 +9,10 @@ O objetivo técnico é construir uma aplicação single-user capaz de:
 - Conectar um perfil profissional do Instagram via Meta API.
 - Configurar e armazenar o Brand Kit do usuário.
 - Fazer upload de identidade visual e extrair referências com IA.
-- Gerar posts únicos ou carrosséis estruturados.
+- Gerar posts únicos, carrosséis estruturados ou roteiros de Reel.
+- Gerar imagens por slide via DALL-E 3.
 - Gerar legendas e hashtags.
-- Publicar diretamente no Instagram.
+- Publicar diretamente no Instagram (feed e Reels).
 
 ---
 
@@ -27,9 +28,9 @@ O objetivo técnico é construir uma aplicação single-user capaz de:
 | Storage | Supabase Storage |
 | Autenticação do Instagram | Meta OAuth |
 | Publicação | Meta Graph API / Instagram API |
-| IA | OpenAI ou modelo multimodal equivalente |
+| IA | OpenAI — gpt-4o (texto + visão) + dall-e-3 (imagens) |
 | Deploy frontend | Vercel |
-| Deploy backend | Render, Railway, Fly.io ou Cloud Run |
+| Deploy backend | Render |
 
 ### Arquitetura em Alto Nível
 
@@ -66,12 +67,12 @@ Responsável por:
 
 | Tela | Descrição |
 |---|---|
-| Dashboard | Resumo do estado da conta, Brand Kit e conteúdos recentes. |
+| Dashboard | Lista de projetos recentes com links para edição. |
 | Configurações | Conexão Instagram e gerenciamento do Brand Kit. |
 | Upload de Identidade | Envio de logos, PDFs, imagens e referências visuais. |
-| Criar Conteúdo | Definição de tema, formato e quantidade de slides. |
-| Preview/Edição | Revisão e edição do post ou carrossel. |
-| Publicação | Revisão final, legenda, hashtags e publicação. |
+| Criar Conteúdo | Definição de tema, formato (post / carrossel / reel) e número de slides/cenas. |
+| Preview/Edição | Revisão e edição do conteúdo; geração de imagem por slide; upload de vídeo para Reel. |
+| Publicação | Revisão final, legenda, hashtags e publicação direta (feed ou Reel). |
 
 ---
 
@@ -188,43 +189,49 @@ Backend salva metadados finais no Supabase
 ```txt
 Usuário informa tema
   ↓
-Escolhe Post Único ou Carrossel
+Escolhe Post Único, Carrossel ou Reel
   ↓
 Backend busca Brand Kit salvo
   ↓
-Backend monta prompt estruturado
+Backend monta prompt estruturado (por tipo)
   ↓
-IA gera estrutura textual e visual
+gpt-4o gera estrutura textual + visual_prompts
   ↓
 Backend salva rascunho no banco
   ↓
 Frontend exibe preview editável
+  ↓
+Usuário clica "Gerar imagem com IA" por slide (opcional)
+  ↓
+DALL-E 3 gera imagem → persiste no Supabase → exibe no preview
 ```
 
 ### Entrada
 
 - Tema do conteúdo.
-- Tipo de conteúdo: `single_post` ou `carousel`.
-- Quantidade de slides, quando for carrossel.
+- Tipo de conteúdo: `single_post`, `carousel` ou `reel`.
+- Quantidade de slides (carrossel: 2–10) ou cenas (reel: 3–6).
 - Brand Kit do usuário.
 - Tom de voz.
 
 ### Saída Esperada
 
-Para post único:
+Para post único e carrossel — por slide:
 
-- Título.
-- Texto principal.
-- Sugestão visual.
-- CTA opcional.
+- `title`: título do slide.
+- `body`: texto de apoio.
+- `visual_prompt`: descrição da imagem ideal (usada pelo DALL-E 3).
 
-Para carrossel:
+Para reel — por cena:
 
-- Lista de slides.
-- Título por slide.
-- Texto de apoio por slide.
-- Sugestão visual por slide.
-- Estrutura narrativa.
+- `title`: nome da cena (ex: Hook, Desenvolvimento, CTA).
+- `body`: roteiro/script — o que falar ou fazer na câmera.
+- `visual_prompt`: direção de câmera — ângulo, movimento, cenário, iluminação.
+
+Em todos os tipos:
+
+- `caption`: legenda completa (até 2.200 chars).
+- `hashtags`: array de 10–30 hashtags segmentadas por alcance.
 
 ---
 
@@ -252,22 +259,42 @@ Usuário revisa antes de publicar
 
 ---
 
-## 4.6 Fluxo de Publicação
+## 4.6 Fluxo de Publicação — Feed (Post Único / Carrossel)
 
 ```txt
-Usuário clica em Publicar Agora
+Usuário fornece URLs das imagens (ou usa media_url gerados pelo DALL-E 3)
   ↓
-Frontend envia conteúdo aprovado ao backend
+POST /instagram/publish/{id} com image_urls
   ↓
-Backend valida token Instagram
+Backend cria container de mídia na Meta API
   ↓
-Backend envia mídia e legenda para Meta API
+Polling até status FINISHED (máx. 60s)
   ↓
-Meta processa publicação
+Backend publica container → obtém media_id
   ↓
-Backend salva status e link do post
+Salva status "published" + instagram_post_url no banco
   ↓
-Frontend exibe sucesso ou erro
+Frontend exibe link do post
+```
+
+## 4.7 Fluxo de Publicação — Reel
+
+```txt
+Usuário faz upload do vídeo (MP4/MOV ≤ 100MB)
+  ↓
+POST /content/upload-video → URL pública no Supabase Storage
+  ↓
+POST /instagram/publish/{id} com video_url
+  ↓
+Backend cria container REELS na Meta API
+  ↓
+Polling até status FINISHED (máx. 5 min)
+  ↓
+Backend publica container → obtém media_id
+  ↓
+Salva status "published" + instagram_post_url no banco
+  ↓
+Frontend exibe link do Reel
 ```
 
 ### Estados de Publicação
@@ -348,12 +375,13 @@ Armazena cada conteúdo criado.
 |---|---|---|
 | id | uuid | Identificador do conteúdo. |
 | user_id | uuid | Dono do conteúdo. |
-| type | text | single_post/carousel. |
+| type | text | single_post / carousel / reel. |
 | theme | text | Tema informado pelo usuário. |
-| status | text | draft/approved/publishing/published/failed. |
-| generated_content | jsonb | Estrutura textual e visual gerada. |
+| slides_count | integer | Número de slides ou cenas. |
+| status | text | draft / approved / publishing / published / failed. |
 | caption | text | Legenda final. |
 | hashtags | jsonb | Hashtags sugeridas. |
+| instagram_media_id | text | ID da mídia na Meta API. |
 | instagram_post_url | text | Link do post publicado. |
 | error_message | text | Mensagem de erro, se houver. |
 | created_at | timestamptz | Data de criação. |
@@ -468,7 +496,7 @@ Confirma ou ajusta os dados extraídos pela IA.
 
 ### `POST /content/generate`
 
-Gera post único ou carrossel.
+Gera post único, carrossel ou reel.
 
 **Payload:**
 
@@ -480,48 +508,67 @@ Gera post único ou carrossel.
 }
 ```
 
+**`type` aceito:** `"single_post"` | `"carousel"` | `"reel"`
+
+---
+
+### `GET /content` / `GET /content/{id}`
+
+Lista ou retorna projeto completo com slides aninhados.
+
+---
+
+### `PATCH /content/{id}`
+
+Atualiza caption, hashtags e campos dos slides (title, body, visual_prompt).
+
+---
+
+### `POST /content/upload-image`
+
+Upload de imagem (JPEG/PNG/WebP ≤ 10 MB) para o bucket `content-media`. Retorna URL pública.
+
+---
+
+### `POST /content/upload-video`
+
+Upload de vídeo (MP4/MOV ≤ 100 MB) para publicação de Reels. Retorna URL pública.
+
+---
+
+### `POST /content/{id}/slides/{slide_id}/generate-image`
+
+Gera imagem via DALL-E 3 usando o `visual_prompt` do slide. Persiste no Supabase e atualiza `media_url`.
+
 **Resposta:**
 
 ```json
 {
-  "content_project_id": "uuid",
-  "type": "carousel",
-  "slides": [
-    {
-      "slide_number": 1,
-      "title": "Sua presença digital importa",
-      "body": "O primeiro passo é entender como sua marca aparece online.",
-      "visual_suggestion": "Fundo claro com destaque para o título."
-    }
-  ]
+  "url": "https://...supabase.co/storage/.../generated/uuid.png",
+  "slide_id": "uuid"
 }
 ```
 
 ---
 
-### `PATCH /content/{content_project_id}`
-
-Atualiza textos editados pelo usuário.
-
----
-
-### `POST /content/{content_project_id}/caption`
-
-Gera legenda e hashtags.
-
----
-
 ## 6.4 Publicação
 
-### `POST /instagram/publish`
+### `POST /instagram/publish/{project_id}`
 
-Publica o conteúdo aprovado no Instagram.
+Publica o conteúdo no Instagram. Comportamento varia por tipo:
 
-**Payload:**
+**Post único / Carrossel:**
+
+```json
+{ "image_urls": ["https://..."] }
+```
+
+**Reel:**
 
 ```json
 {
-  "content_project_id": "uuid"
+  "video_url": "https://...",
+  "cover_url": "https://..."
 }
 ```
 
@@ -530,7 +577,9 @@ Publica o conteúdo aprovado no Instagram.
 ```json
 {
   "status": "published",
-  "instagram_post_url": "https://instagram.com/p/..."
+  "instagram_media_id": "...",
+  "instagram_post_url": "https://instagram.com/p/...",
+  "message": "Publicado com sucesso no Instagram!"
 }
 ```
 
@@ -564,46 +613,48 @@ Saída esperada em JSON:
 
 ---
 
-## 7.2 Prompt para Geração de Conteúdo
+## 7.2 Prompt para Geração de Conteúdo (gpt-4o)
 
 Entrada:
 
 - Tema.
-- Tipo de conteúdo.
-- Quantidade de slides.
-- Brand Kit.
-- Tom de voz.
+- Tipo de conteúdo: `single_post`, `carousel` ou `reel`.
+- Quantidade de slides/cenas.
+- Brand Kit (cores, tom de voz).
 
-Saída esperada em JSON.
-
-Para post único:
+Saída esperada em JSON (estrutura unificada):
 
 ```json
 {
-  "type": "single_post",
-  "title": "Título do post",
-  "body": "Texto principal",
-  "visual_suggestion": "Descrição visual da arte",
-  "cta": "Chamada para ação"
-}
-```
-
-Para carrossel:
-
-```json
-{
-  "type": "carousel",
+  "caption": "Legenda completa com CTA...",
+  "hashtags": ["#hashtag1", "#hashtag2"],
   "slides": [
     {
-      "slide_number": 1,
-      "title": "Título do slide",
-      "body": "Texto de apoio",
-      "visual_suggestion": "Descrição visual"
+      "slide_order": 1,
+      "title": "Título do slide ou nome da cena",
+      "body": "Texto do slide ou roteiro da cena",
+      "visual_prompt": "Descrição detalhada da imagem ou direção de câmera"
     }
-  ],
-  "narrative_structure": "gancho, desenvolvimento, fechamento e CTA"
+  ]
 }
 ```
+
+Para **reel**, `visual_prompt` descreve direção de câmera (ângulo, movimento, cenário). Para **post/carrossel**, descreve a imagem ideal para geração via DALL-E 3.
+
+---
+
+## 7.3 Geração de Imagem (DALL-E 3)
+
+Entrada:
+
+- `visual_prompt` do slide (gerado pelo gpt-4o).
+- Enriquecido automaticamente com: proporção 1:1, alta qualidade, sem texto sobreposto.
+
+Saída:
+
+- URL temporária da OpenAI (~1h de validade).
+- Baixada e persistida em `content-media/generated/{uuid}.png`.
+- URL pública permanente retornada e salva em `content_slides.media_url`.
 
 ---
 
@@ -682,29 +733,28 @@ Saída esperada:
 ```txt
 backend/
   app/
-    main.py
+    main.py               # startup, CORS, routers, validação de env vars
     core/
-      config.py
-      security.py
+      config.py           # variáveis de ambiente
+      security.py         # criptografia Fernet
     api/
       routes/
         instagram_auth.py
         brand_kit.py
-        content.py
-        publish.py
+        content.py        # geração, CRUD, upload-image, upload-video, generate-image
+        publish.py        # publicação (single_post / carousel / reel)
     services/
       meta_service.py
-      ai_service.py
+      ai_service.py              # gpt-4o (texto + reel) — cliente singleton
       supabase_service.py
       brand_extraction_service.py
-      publishing_service.py
+      publishing_service.py      # async — suporta post, carrossel e reel
+      image_service.py           # dall-e-3 → download → Supabase Storage
     models/
-      schemas.py
+      schemas.py          # Pydantic — inclui type "reel"
     utils/
       file_validation.py
-      encryption.py
   requirements.txt
-  Dockerfile
 ```
 
 ---
