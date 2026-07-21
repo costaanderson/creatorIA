@@ -215,6 +215,10 @@ export async function deleteContent(id: string): Promise<void> {
   await request<unknown>(`/content/${id}`, { method: 'DELETE' });
 }
 
+export async function unpublishContent(projectId: string): Promise<PublishResponse> {
+  return request<PublishResponse>(`/instagram/unpublish/${projectId}`, { method: 'POST' });
+}
+
 export interface PublishResponse {
   status: string;
   instagram_media_id?: string;

@@ -278,6 +278,28 @@ async def publish_reel(
     return {"media_id": media_id, "post_url": post_url}
 
 
+async def delete_media(media_id: str) -> None:
+    """
+    Remove uma mídia publicada do Instagram via Meta Graph API.
+    Lança RuntimeError se a API retornar erro.
+    """
+    logger.info("Removendo mídia do Instagram. media_id=%s", media_id)
+    async with httpx.AsyncClient() as client:
+        resp = await client.delete(
+            f"{_base()}/{media_id}",
+            params={"access_token": _token()},
+            timeout=15,
+        )
+        if not resp.is_success:
+            raise RuntimeError(
+                f"Erro ao remover mídia (HTTP {resp.status_code}): {resp.text}"
+            )
+        result = resp.json()
+        if not result.get("success"):
+            raise RuntimeError(f"Meta API não confirmou remoção: {result}")
+    logger.info("Mídia %s removida do Instagram.", media_id)
+
+
 def _media_id_to_shortcode(media_id: str) -> str:
     """
     Converte media_id numérico em shortcode Base64 do Instagram.

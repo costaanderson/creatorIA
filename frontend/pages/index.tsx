@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, ContentProjectResponse, deleteContent, listContent } from '../lib/api';
+import { ApiError, ContentProjectResponse, deleteContent, listContent, unpublishContent } from '../lib/api';
 import ErrorMessage from '../components/ErrorMessage';
 
 type ListState =
@@ -31,6 +31,7 @@ export default function Home() {
   const [listState, setListState] = useState<ListState>({ status: 'loading' });
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [unpublishingId, setUnpublishingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setListState({ status: 'loading' });
@@ -43,6 +44,33 @@ export default function Home() {
       setListState({ status: 'error', message });
     }
   }, []);
+
+  const handleUnpublish = async (e: React.MouseEvent, projectId: string) => {
+    e.preventDefault();
+    if (!confirm('Remover este post do Instagram? O projeto voltará para Rascunho.')) return;
+    setUnpublishingId(projectId);
+    setDeleteError(null);
+    try {
+      await unpublishContent(projectId);
+      setListState((prev) =>
+        prev.status === 'ready'
+          ? {
+              ...prev,
+              projects: prev.projects.map((p) =>
+                p.id === projectId
+                  ? { ...p, status: 'draft', instagram_media_id: undefined, instagram_post_url: undefined }
+                  : p
+              ),
+            }
+          : prev
+      );
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Erro ao despublicar o projeto.';
+      setDeleteError(message);
+    } finally {
+      setUnpublishingId(null);
+    }
+  };
 
   const handleDelete = async (e: React.MouseEvent, projectId: string, theme: string) => {
     e.preventDefault();
@@ -242,6 +270,8 @@ export default function Home() {
                     ? `🎬 Reel · ${p.slides_count} cenas`
                     : '🖼️ Post único';
                 const isDeleting = deletingId === p.id;
+                const isUnpublishing = unpublishingId === p.id;
+                const isBusy = isDeleting || isUnpublishing;
                 return (
                   <li
                     key={p.id}
@@ -299,35 +329,68 @@ export default function Home() {
                         {text}
                       </span>
                     </Link>
-                    <button
-                      onClick={(e) => handleDelete(e, p.id, p.theme)}
-                      disabled={isDeleting}
-                      title="Excluir projeto"
-                      style={{
-                        flexShrink: 0,
-                        padding: '0.5rem 0.75rem',
-                        marginRight: '0.75rem',
-                        background: 'none',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: 7,
-                        color: isDeleting ? '#d1d5db' : '#9ca3af',
-                        cursor: isDeleting ? 'not-allowed' : 'pointer',
-                        fontSize: '0.875rem',
-                        transition: 'color 0.12s, border-color 0.12s',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isDeleting) {
-                          (e.currentTarget as HTMLButtonElement).style.color = '#dc2626';
-                          (e.currentTarget as HTMLButtonElement).style.borderColor = '#fca5a5';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.color = '#9ca3af';
-                        (e.currentTarget as HTMLButtonElement).style.borderColor = '#e5e7eb';
-                      }}
-                    >
-                      {isDeleting ? '…' : '🗑'}
-                    </button>
+
+                    {/* Ações */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginRight: '0.75rem', flexShrink: 0 }}>
+                      {p.status === 'published' && (
+                        <button
+                          onClick={(e) => handleUnpublish(e, p.id)}
+                          disabled={isBusy}
+                          title="Despublicar do Instagram"
+                          style={{
+                            padding: '0.375rem 0.625rem',
+                            background: 'none',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: 7,
+                            color: isBusy ? '#d1d5db' : '#6b7280',
+                            cursor: isBusy ? 'not-allowed' : 'pointer',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            transition: 'color 0.12s, border-color 0.12s',
+                            whiteSpace: 'nowrap',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isBusy) {
+                              (e.currentTarget as HTMLButtonElement).style.color = '#d97706';
+                              (e.currentTarget as HTMLButtonElement).style.borderColor = '#fcd34d';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLButtonElement).style.color = '#6b7280';
+                            (e.currentTarget as HTMLButtonElement).style.borderColor = '#e5e7eb';
+                          }}
+                        >
+                          {isUnpublishing ? '…' : '↩ Despublicar'}
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => handleDelete(e, p.id, p.theme)}
+                        disabled={isBusy}
+                        title="Excluir projeto"
+                        style={{
+                          padding: '0.375rem 0.5rem',
+                          background: 'none',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: 7,
+                          color: isBusy ? '#d1d5db' : '#9ca3af',
+                          cursor: isBusy ? 'not-allowed' : 'pointer',
+                          fontSize: '0.875rem',
+                          transition: 'color 0.12s, border-color 0.12s',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isBusy) {
+                            (e.currentTarget as HTMLButtonElement).style.color = '#dc2626';
+                            (e.currentTarget as HTMLButtonElement).style.borderColor = '#fca5a5';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.color = '#9ca3af';
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = '#e5e7eb';
+                        }}
+                      >
+                        {isDeleting ? '…' : '🗑'}
+                      </button>
+                    </div>
                   </li>
                 );
               })}

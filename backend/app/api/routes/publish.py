@@ -1,7 +1,8 @@
 """
 Rotas de Publicação no Instagram — Fase 4.
 
-POST /instagram/publish/{project_id}  → publica o projeto no Instagram
+POST /instagram/publish/{project_id}    → publica o projeto no Instagram
+POST /instagram/unpublish/{project_id}  → remove o post do Instagram e reseta status
 """
 
 from __future__ import annotations
@@ -172,4 +173,49 @@ async def publish_project(project_id: str, body: PublishRequest = PublishRequest
         instagram_media_id=media_id,
         instagram_post_url=post_url,
         message="Publicado com sucesso no Instagram! 🎉",
+    )
+
+
+@router.post("/unpublish/{project_id}", response_model=PublishResponse)
+async def unpublish_project(project_id: str):
+    """
+    Remove o post do Instagram e reseta o projeto para status 'draft'.
+    Requer que o projeto tenha instagram_media_id salvo.
+    """
+    project = _get_project(project_id)
+
+    if project["status"] != "published":
+        raise HTTPException(
+            status_code=409,
+            detail="Apenas projetos com status 'published' podem ser despublicados.",
+        )
+
+    media_id = project.get("instagram_media_id")
+    if not media_id:
+        raise HTTPException(
+            status_code=422,
+            detail="ID da mídia no Instagram não encontrado. Não é possível despublicar.",
+        )
+
+    try:
+        await publishing_service.delete_media(media_id)
+    except RuntimeError as exc:
+        logger.error("Falha ao despublicar projeto %s: %s", project_id, exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Erro ao remover post do Instagram: {exc}",
+        )
+
+    _update_project(project_id, {
+        "status": "draft",
+        "instagram_media_id": None,
+        "instagram_post_url": None,
+        "error_message": None,
+    })
+
+    logger.info("Projeto %s despublicado (media_id=%s removido).", project_id, media_id)
+
+    return PublishResponse(
+        status="draft",
+        message="Post removido do Instagram. O projeto voltou para rascunho.",
     )
