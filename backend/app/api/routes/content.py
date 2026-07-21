@@ -207,6 +207,8 @@ async def update_project(project_id: str, payload: ContentUpdateRequest):
         project_update["caption"] = payload.caption
     if payload.hashtags is not None:
         project_update["hashtags"] = payload.hashtags
+    if payload.status is not None:
+        project_update["status"] = payload.status
 
     if project_update:
         project_update["updated_at"] = datetime.now(timezone.utc).isoformat()

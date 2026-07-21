@@ -192,15 +192,15 @@ async def unpublish_project(project_id: str):
         )
 
     _update_project(project_id, {
-        "status": "draft",
+        "status": "archived",
         "instagram_media_id": None,
         "instagram_post_url": None,
         "error_message": None,
     })
 
-    logger.info("Projeto %s arquivado localmente (voltou para draft).", project_id)
+    logger.info("Projeto %s arquivado (status=archived).", project_id)
 
     return PublishResponse(
-        status="draft",
+        status="archived",
         message="Projeto arquivado. Lembre-se de remover o post manualmente no Instagram.",
     )

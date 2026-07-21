@@ -140,6 +140,7 @@ class ContentUpdateRequest(BaseModel):
     caption: Optional[str] = Field(None, max_length=2200)
     hashtags: Optional[List[str]] = None
     slides: Optional[List[SlideUpdateItem]] = None
+    status: Optional[Literal["draft", "approved", "archived"]] = None
 
 
 class SlideResponse(BaseModel):

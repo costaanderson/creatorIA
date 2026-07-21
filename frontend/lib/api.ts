@@ -138,7 +138,7 @@ export async function uploadIdentityFile(file: File): Promise<BrandKitExtraction
 // ─── Content ──────────────────────────────────────────────────────────────────
 
 export type ContentType = 'single_post' | 'carousel' | 'reel';
-export type ContentStatus = 'draft' | 'approved' | 'publishing' | 'published' | 'failed';
+export type ContentStatus = 'draft' | 'approved' | 'publishing' | 'published' | 'failed' | 'archived';
 
 export interface ContentGenerateRequest {
   theme: string;
@@ -199,6 +199,7 @@ export interface ContentUpdateRequest {
   caption?: string;
   hashtags?: string[];
   slides?: Array<{ id: string; title?: string; body?: string; visual_prompt?: string; media_url?: string }>;
+  status?: 'draft' | 'approved' | 'archived';
 }
 
 export async function updateContent(
