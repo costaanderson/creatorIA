@@ -25,8 +25,9 @@ from app.core import config
 
 logger = logging.getLogger(__name__)
 
-_MAX_POLL = 12        # tentativas de polling (12 × 5s = 60s máx)
-_POLL_INTERVAL = 5   # segundos entre cada poll
+_MAX_POLL = 12         # tentativas de polling para imagens (12 × 5s = 60s máx)
+_MAX_POLL_VIDEO = 60  # tentativas para vídeo/reel (60 × 5s = 5min máx)
+_POLL_INTERVAL = 5    # segundos entre cada poll
 
 
 def _base() -> str:
@@ -45,9 +46,13 @@ def _ig_id() -> str:
     return config.INSTAGRAM_BUSINESS_ID
 
 
-async def _wait_ready(client: httpx.AsyncClient, container_id: str) -> None:
+async def _wait_ready(
+    client: httpx.AsyncClient,
+    container_id: str,
+    max_poll: int = _MAX_POLL,
+) -> None:
     """Aguarda o container ficar com status FINISHED. Lança RuntimeError em caso de erro/timeout."""
-    for attempt in range(_MAX_POLL):
+    for attempt in range(max_poll):
         resp = await client.get(
             f"{_base()}/{container_id}",
             params={"fields": "status_code", "access_token": _token()},
@@ -62,7 +67,7 @@ async def _wait_ready(client: httpx.AsyncClient, container_id: str) -> None:
         logger.debug("Container %s aguardando... tentativa %d status=%s", container_id, attempt + 1, status)
         await asyncio.sleep(_POLL_INTERVAL)
 
-    raise RuntimeError(f"Timeout: container {container_id} não ficou pronto em {_MAX_POLL * _POLL_INTERVAL}s")
+    raise RuntimeError(f"Timeout: container {container_id} não ficou pronto em {max_poll * _POLL_INTERVAL}s")
 
 
 async def _create_single_container(
@@ -212,6 +217,64 @@ async def publish_carousel(
 
     post_url = f"https://www.instagram.com/p/{_media_id_to_shortcode(media_id)}/" if media_id else None
     logger.info("Carrossel publicado. media_id=%s", media_id)
+    return {"media_id": media_id, "post_url": post_url}
+
+
+async def publish_reel(
+    video_url: str,
+    caption: str,
+    hashtags: list[str],
+    cover_url: Optional[str] = None,
+) -> dict:
+    """
+    Publica um Reel no Instagram via Meta Graph API.
+
+    Args:
+        video_url:  URL pública do vídeo MP4 (máx. 90s, proporção 9:16 recomendada).
+        caption:    Legenda do Reel.
+        hashtags:   Lista de hashtags.
+        cover_url:  URL pública da imagem de capa (opcional).
+
+    Returns:
+        dict com "media_id" e "post_url"
+    """
+    logger.info("Publicando Reel. video_url=%s", video_url)
+    full_caption = f"{caption}\n\n{' '.join(hashtags)}" if hashtags else caption
+
+    async with httpx.AsyncClient() as client:
+        # 1. Criar container de Reel
+        payload: dict = {
+            "access_token": _token(),
+            "media_type": "REELS",
+            "video_url": video_url,
+            "caption": full_caption,
+            "share_to_feed": "true",
+        }
+        if cover_url:
+            payload["cover_url"] = cover_url
+
+        resp = await client.post(
+            f"{_base()}/{_ig_id()}/media",
+            data=payload,
+            timeout=30,
+        )
+        if not resp.is_success:
+            raise RuntimeError(f"Erro ao criar container do Reel (HTTP {resp.status_code}): {resp.text}")
+        result = resp.json()
+        if "id" not in result:
+            raise RuntimeError(f"Erro ao criar container do Reel: {result}")
+
+        container_id = result["id"]
+        logger.info("Container do Reel criado: %s — aguardando processamento (até 5 min)...", container_id)
+
+        # 2. Aguardar processamento (vídeos demoram mais que imagens)
+        await _wait_ready(client, container_id, max_poll=_MAX_POLL_VIDEO)
+
+        # 3. Publicar
+        media_id = await _publish_container(client, container_id)
+
+    post_url = f"https://www.instagram.com/reel/{_media_id_to_shortcode(media_id)}/" if media_id else None
+    logger.info("Reel publicado. media_id=%s", media_id)
     return {"media_id": media_id, "post_url": post_url}
 
 

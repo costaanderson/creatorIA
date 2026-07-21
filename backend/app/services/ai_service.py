@@ -93,6 +93,16 @@ _CAROUSEL_INSTRUCTION = (
     "O último slide é a chamada para ação (salvar, seguir, comentar)."
 )
 
+_REEL_INSTRUCTION = (
+    "Gere exatamente {n} cenas para um Reel do Instagram (vídeo vertical 9:16, até 90 segundos). "
+    "Cada cena representa um segmento de 3–8 segundos do vídeo. "
+    "O 'title' é o nome da cena (ex: 'Hook', 'Problema', 'Solução', 'CTA'). "
+    "O 'body' é o roteiro/script — o que a pessoa deve falar ou fazer na câmera nesta cena. "
+    "O 'visual_prompt' descreve como gravar: ângulo de câmera, movimento, cenário, iluminação, expressão. "
+    "A primeira cena é o HOOK (gancho nos primeiros 3 segundos — deve prender atenção imediatamente). "
+    "A última cena é o CTA (chamada para ação clara: seguir, comentar, salvar, enviar para alguém)."
+)
+
 
 # ─── Cliente OpenAI (singleton) ──────────────────────────────────────────────
 
@@ -146,14 +156,19 @@ def _build_system_prompt(
 ) -> str:
     if content_type == "single_post":
         slide_instruction = _SINGLE_POST_INSTRUCTION
-    else:
+        type_label = "post único"
+    elif content_type == "carousel":
         slide_instruction = _CAROUSEL_INSTRUCTION.format(n=slides_count)
+        type_label = f"carrossel de {slides_count} slides"
+    else:  # reel
+        slide_instruction = _REEL_INSTRUCTION.format(n=slides_count)
+        type_label = f"roteiro de Reel com {slides_count} cenas"
 
     return _SYSTEM_TEMPLATE.format(
         primary_color=brand_kit.get("primary_color") or "#6366F1",
         secondary_color=brand_kit.get("secondary_color") or "#F97316",
         tone_of_voice=brand_kit.get("tone_of_voice") or "Profissional e acessível.",
-        content_type="post único" if content_type == "single_post" else f"carrossel de {slides_count} slides",
+        content_type=type_label,
         slide_instruction=slide_instruction,
     )
 
@@ -290,7 +305,12 @@ async def generate_content(
         RuntimeError:  Falha na API da OpenAI (timeout, quota, etc.).
         ValueError:    Resposta da IA inválida ou irrecuperável.
     """
-    effective_slides = 1 if content_type == "single_post" else (slides_count or 3)
+    if content_type == "single_post":
+        effective_slides = 1
+    elif content_type == "reel":
+        effective_slides = slides_count or 4
+    else:
+        effective_slides = slides_count or 3
 
     # 1. Brand Kit
     brand_kit = _fetch_brand_kit(user_id)

@@ -90,7 +90,7 @@ class BrandKitExtractionResponse(BaseModel):
     primary_color: Optional[str] = None
     secondary_color: Optional[str] = None
     tone_of_voice: Optional[str] = None
-    raw_analysis: str = Field(..., description="Análise completa retornada pelo Grok")
+    raw_analysis: str = Field(..., description="Análise completa retornada pelo gpt-4o")
 
 
 # ─── Fase 3 — Geração de Conteúdo ────────────────────────────────────────────
@@ -106,15 +106,15 @@ class ContentGenerateRequest(BaseModel):
         description="Tema ou briefing do conteúdo a ser gerado.",
         example="5 erros que designers iniciantes cometem no logo",
     )
-    type: Literal["single_post", "carousel"] = Field(
+    type: Literal["single_post", "carousel", "reel"] = Field(
         ...,
-        description="Tipo de conteúdo: post único ou carrossel.",
+        description="Tipo de conteúdo: post único, carrossel ou reel.",
     )
     slides_count: Optional[int] = Field(
         None,
         ge=2,
         le=10,
-        description="Número de slides (apenas para carousel). Ignorado em single_post.",
+        description="Número de slides/cenas. Obrigatório para carousel. Opcional para reel (padrão 4).",
     )
 
     @field_validator("slides_count")

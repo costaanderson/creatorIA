@@ -137,7 +137,7 @@ export async function uploadIdentityFile(file: File): Promise<BrandKitExtraction
 
 // ─── Content ──────────────────────────────────────────────────────────────────
 
-export type ContentType = 'single_post' | 'carousel';
+export type ContentType = 'single_post' | 'carousel' | 'reel';
 export type ContentStatus = 'draft' | 'approved' | 'publishing' | 'published' | 'failed';
 
 export interface ContentGenerateRequest {
@@ -226,6 +226,53 @@ export async function publishContent(
     method: 'POST',
     body: JSON.stringify({ image_urls: imageUrls }),
   });
+}
+
+export async function publishReel(
+  projectId: string,
+  videoUrl: string,
+  coverUrl?: string,
+): Promise<PublishResponse> {
+  return request<PublishResponse>(`/instagram/publish/${projectId}`, {
+    method: 'POST',
+    body: JSON.stringify({ video_url: videoUrl, cover_url: coverUrl }),
+  });
+}
+
+export async function generateSlideImage(
+  projectId: string,
+  slideId: string,
+): Promise<{ url: string; slide_id: string }> {
+  return request<{ url: string; slide_id: string }>(
+    `/content/${projectId}/slides/${slideId}/generate-image`,
+    { method: 'POST' },
+  );
+}
+
+export async function uploadContentVideo(file: File): Promise<{ url: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/content/upload-video`, {
+      method: 'POST',
+      body: formData,
+    });
+  } catch {
+    throw new ApiError(0, 'Não foi possível conectar ao servidor.');
+  }
+
+  if (!response.ok) {
+    let detail = `Erro ${response.status}`;
+    try {
+      const body = await response.json();
+      detail = body?.detail ?? detail;
+    } catch { /* ignore */ }
+    throw new ApiError(response.status, detail);
+  }
+
+  return response.json() as Promise<{ url: string }>;
 }
 
 // ─── Instagram ────────────────────────────────────────────────────────────────

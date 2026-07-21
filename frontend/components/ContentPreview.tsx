@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ContentProjectResponse,
   ContentUpdateRequest,
+  generateSlideImage,
   publishContent,
+  publishReel,
   updateContent,
+  uploadContentVideo,
   ApiError,
 } from '../lib/api';
 import InstagramPreview from './InstagramPreview';
@@ -54,12 +57,25 @@ export default function ContentPreview({ project, onNewContent, onUpdated, prese
   const [imageUrlsInput, setImageUrlsInput] = useState('');
   const [showInstagramPreview, setShowInstagramPreview] = useState(false);
 
+  // Geração de imagem por slide
+  const [generatingImage, setGeneratingImage] = useState<Record<string, boolean>>({});
+  const [slideImages, setSlideImages] = useState<Record<string, string>>(() =>
+    Object.fromEntries(project.slides.filter((s) => s.media_url).map((s) => [s.id, s.media_url!]))
+  );
+
+  // Upload de vídeo para Reel
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const [videoUpload, setVideoUpload] = useState<{ url: string; name: string } | null>(null);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [videoUploadError, setVideoUploadError] = useState<string | null>(null);
+
   const [editState, setEditState] = useState<EditState>(() => initEditState(project));
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const slide = project.slides[activeSlide];
   const isCarousel = project.type === 'carousel';
+  const isReel = project.type === 'reel';
   const alreadyPublished = project.status === 'published';
 
   const copyToClipboard = async (text: string, setCopied: (v: boolean) => void) => {
@@ -74,37 +90,73 @@ export default function ContentPreview({ project, onNewContent, onUpdated, prese
 
   const hashtagsText = project.hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join(' ');
 
+  const handleGenerateImage = async (slideId: string) => {
+    setGeneratingImage((prev) => ({ ...prev, [slideId]: true }));
+    try {
+      const result = await generateSlideImage(project.id, slideId);
+      setSlideImages((prev) => ({ ...prev, [slideId]: result.url }));
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Erro ao gerar imagem.';
+      alert(msg);
+    } finally {
+      setGeneratingImage((prev) => ({ ...prev, [slideId]: false }));
+    }
+  };
+
+  const handleVideoUpload = async (file: File) => {
+    setUploadingVideo(true);
+    setVideoUploadError(null);
+    try {
+      const result = await uploadContentVideo(file);
+      setVideoUpload({ url: result.url, name: file.name });
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Erro no upload do vídeo.';
+      setVideoUploadError(msg);
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
+
   const handlePublishClick = () => {
     if (publishState.status === 'idle' || publishState.status === 'error') {
-      // Pre-fill with URLs from the generator form if available
-      const prefilled =
-        presetImageUrls && presetImageUrls.filter((u) => u.startsWith('http')).length > 0
-          ? presetImageUrls.filter((u) => u.startsWith('http')).join('\n')
-          : '';
-      setImageUrlsInput(prefilled);
+      if (!isReel) {
+        const prefilled =
+          presetImageUrls && presetImageUrls.filter((u) => u.startsWith('http')).length > 0
+            ? presetImageUrls.filter((u) => u.startsWith('http')).join('\n')
+            : Object.values(slideImages).join('\n');
+        setImageUrlsInput(prefilled);
+      }
       setPublishState({ status: 'awaiting_url' });
     }
   };
 
   const handleConfirmPublish = async () => {
-    const urls = imageUrlsInput
-      .split('\n')
-      .map((u) => u.trim())
-      .filter((u) => u.startsWith('http'));
-
-    const required = isCarousel ? project.slides_count : 1;
-    if (urls.length < required) {
-      setPublishState({
-        status: 'error',
-        message: `Informe ${required} URL${required > 1 ? 's' : ''} de imagem (uma por linha).`,
-      });
-      return;
-    }
-
     setPublishState({ status: 'publishing' });
     try {
-      const result = await publishContent(project.id, urls);
-      setPublishState({ status: 'success', postUrl: result.instagram_post_url });
+      if (isReel) {
+        if (!videoUpload?.url) {
+          setPublishState({ status: 'error', message: 'Faça upload do vídeo antes de publicar.' });
+          return;
+        }
+        const coverUrl = Object.values(slideImages)[0];
+        const result = await publishReel(project.id, videoUpload.url, coverUrl);
+        setPublishState({ status: 'success', postUrl: result.instagram_post_url });
+      } else {
+        const urls = imageUrlsInput
+          .split('\n')
+          .map((u) => u.trim())
+          .filter((u) => u.startsWith('http'));
+        const required = isCarousel ? project.slides_count : 1;
+        if (urls.length < required) {
+          setPublishState({
+            status: 'error',
+            message: `Informe ${required} URL${required > 1 ? 's' : ''} de imagem (uma por linha).`,
+          });
+          return;
+        }
+        const result = await publishContent(project.id, urls);
+        setPublishState({ status: 'success', postUrl: result.instagram_post_url });
+      }
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Erro ao publicar. Tente novamente.';
       setPublishState({ status: 'error', message: msg });
@@ -170,7 +222,11 @@ export default function ContentPreview({ project, onNewContent, onUpdated, prese
       <div className={styles.header}>
         <div className={styles.headerMeta}>
           <span className={styles.badge}>
-            {isCarousel ? `📑 Carrossel · ${project.slides_count} slides` : '🖼️ Post único'}
+            {isReel
+              ? `🎬 Reel · ${project.slides_count} cenas`
+              : isCarousel
+              ? `📑 Carrossel · ${project.slides_count} slides`
+              : '🖼️ Post único'}
           </span>
           <span className={styles.theme}>{project.theme}</span>
         </div>
@@ -217,7 +273,7 @@ export default function ContentPreview({ project, onNewContent, onUpdated, prese
             <div className={styles.slideCard}>
               <div className={styles.slideHeader}>
                 <span className={styles.slideNumber}>
-                  {isCarousel ? `Slide ${slide.slide_order}` : 'Conteúdo'}
+                  {isReel ? `Cena ${slide.slide_order}` : isCarousel ? `Slide ${slide.slide_order}` : 'Conteúdo'}
                 </span>
               </div>
 
@@ -226,8 +282,40 @@ export default function ContentPreview({ project, onNewContent, onUpdated, prese
 
               {slide.visual_prompt && (
                 <div className={styles.visualPromptBox}>
-                  <span className={styles.visualPromptLabel}>🎨 Prompt visual</span>
+                  <span className={styles.visualPromptLabel}>
+                    {isReel ? '🎥 Direção de câmera' : '🎨 Prompt visual'}
+                  </span>
                   <p className={styles.visualPromptText}>{slide.visual_prompt}</p>
+
+                  {/* Imagem gerada */}
+                  {slideImages[slide.id] ? (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={slideImages[slide.id]}
+                        alt={`Imagem gerada — ${slide.title}`}
+                        style={{ width: '100%', borderRadius: '8px', display: 'block' }}
+                      />
+                    </div>
+                  ) : !isReel && (
+                    <button
+                      style={{
+                        marginTop: '0.75rem',
+                        padding: '0.4rem 0.9rem',
+                        fontSize: '0.8rem',
+                        borderRadius: '6px',
+                        border: '1px solid #6366F1',
+                        background: 'transparent',
+                        color: '#6366F1',
+                        cursor: generatingImage[slide.id] ? 'not-allowed' : 'pointer',
+                        opacity: generatingImage[slide.id] ? 0.6 : 1,
+                      }}
+                      onClick={() => handleGenerateImage(slide.id)}
+                      disabled={generatingImage[slide.id]}
+                    >
+                      {generatingImage[slide.id] ? '⏳ Gerando imagem…' : '✨ Gerar imagem com IA'}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -320,16 +408,50 @@ export default function ContentPreview({ project, onNewContent, onUpdated, prese
               </div>
             ) : publishState.status === 'awaiting_url' || publishState.status === 'error' ? (
               <div className={styles.urlInputArea}>
-                <p className={styles.urlInputLabel}>
-                  Cole {isCarousel ? `${project.slides_count} URLs de imagem (uma por linha)` : 'a URL pública da imagem'}:
-                </p>
-                <textarea
-                  className={styles.urlTextarea}
-                  rows={isCarousel ? project.slides_count : 2}
-                  placeholder={isCarousel ? 'https://... (slide 1)\nhttps://... (slide 2)' : 'https://...'}
-                  value={imageUrlsInput}
-                  onChange={(e) => setImageUrlsInput(e.target.value)}
-                />
+                {isReel ? (
+                  <>
+                    <p className={styles.urlInputLabel}>Faça upload do vídeo do Reel (MP4 ou MOV · máx. 100 MB):</p>
+                    <input
+                      ref={videoInputRef}
+                      type="file"
+                      accept="video/mp4,video/quicktime"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleVideoUpload(file);
+                        e.target.value = '';
+                      }}
+                    />
+                    {videoUpload ? (
+                      <div style={{ padding: '0.5rem', background: '#f0fdf4', borderRadius: '6px', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+                        ✅ {videoUpload.name}
+                      </div>
+                    ) : (
+                      <button
+                        className={styles.cancelBtn}
+                        onClick={() => videoInputRef.current?.click()}
+                        disabled={uploadingVideo}
+                        style={{ marginBottom: '0.75rem' }}
+                      >
+                        {uploadingVideo ? '⏳ Enviando vídeo…' : '📁 Selecionar vídeo'}
+                      </button>
+                    )}
+                    {videoUploadError && <p className={styles.publishError}>{videoUploadError}</p>}
+                  </>
+                ) : (
+                  <>
+                    <p className={styles.urlInputLabel}>
+                      Cole {isCarousel ? `${project.slides_count} URLs de imagem (uma por linha)` : 'a URL pública da imagem'}:
+                    </p>
+                    <textarea
+                      className={styles.urlTextarea}
+                      rows={isCarousel ? project.slides_count : 2}
+                      placeholder={isCarousel ? 'https://... (slide 1)\nhttps://... (slide 2)' : 'https://...'}
+                      value={imageUrlsInput}
+                      onChange={(e) => setImageUrlsInput(e.target.value)}
+                    />
+                  </>
+                )}
                 {publishState.status === 'error' && (
                   <p className={styles.publishError}>{publishState.message}</p>
                 )}
@@ -340,14 +462,18 @@ export default function ContentPreview({ project, onNewContent, onUpdated, prese
                   >
                     Cancelar
                   </button>
-                  <button className={styles.publishBtn} onClick={handleConfirmPublish}>
+                  <button
+                    className={styles.publishBtn}
+                    onClick={handleConfirmPublish}
+                    disabled={isReel && !videoUpload}
+                  >
                     Publicar agora
                   </button>
                 </div>
               </div>
             ) : (
               <button className={styles.publishBtn} onClick={handlePublishClick}>
-                📤 Publicar no Instagram
+                {isReel ? '🎬 Publicar Reel no Instagram' : '📤 Publicar no Instagram'}
               </button>
             )}
           </div>

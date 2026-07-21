@@ -28,8 +28,15 @@ TABLE_SLIDES = "content_slides"
 
 
 class PublishRequest(BaseModel):
-    """Payload opcional para publicação. image_urls é obrigatório quando o projeto não tem media_url nos slides."""
+    """
+    Payload para publicação.
+    - image_urls: URLs das imagens (post único ou carrossel).
+    - video_url: URL do vídeo (reel).
+    - cover_url: URL da imagem de capa do Reel (opcional).
+    """
     image_urls: Optional[list[str]] = None
+    video_url: Optional[str] = None
+    cover_url: Optional[str] = None
 
 
 class PublishResponse(BaseModel):
@@ -91,27 +98,40 @@ async def publish_project(project_id: str, body: PublishRequest = PublishRequest
     caption = project.get("caption") or ""
     hashtags = project.get("hashtags") or []
 
-    # Resolve image_urls: body tem prioridade; fallback para media_url dos slides
-    image_urls: list[str] = []
-    if body.image_urls:
-        image_urls = body.image_urls
+    # Validações por tipo
+    if content_type == "reel":
+        video_url = body.video_url
+        if not video_url:
+            # Tenta pegar do primeiro slide (media_url pode ter sido gerada)
+            video_url = next((s["media_url"] for s in slides if s.get("media_url")), None)
+        if not video_url:
+            raise HTTPException(
+                status_code=422,
+                detail="Forneça video_url no body para publicar um Reel.",
+            )
     else:
-        image_urls = [s["media_url"] for s in slides if s.get("media_url")]
-
-    if not image_urls:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "Nenhuma imagem fornecida. "
-                "Envie image_urls no body ou gere as imagens dos slides antes de publicar."
-            ),
-        )
+        image_urls = body.image_urls or [s["media_url"] for s in slides if s.get("media_url")]
+        if not image_urls:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Nenhuma imagem fornecida. "
+                    "Envie image_urls no body ou gere as imagens dos slides antes de publicar."
+                ),
+            )
 
     # Marca como publicando
     _update_project(project_id, {"status": "publishing"})
 
     try:
-        if content_type == "single_post":
+        if content_type == "reel":
+            result = await publishing_service.publish_reel(
+                video_url=video_url,
+                caption=caption,
+                hashtags=hashtags,
+                cover_url=body.cover_url,
+            )
+        elif content_type == "single_post":
             result = await publishing_service.publish_single_post(
                 image_url=image_urls[0],
                 caption=caption,

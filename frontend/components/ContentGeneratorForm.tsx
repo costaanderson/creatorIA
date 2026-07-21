@@ -72,12 +72,12 @@ export default function ContentGeneratorForm({ onGenerate, loading }: Props) {
     const trimmed = theme.trim();
     if (!trimmed || loading) return;
 
-    const imageUrls = syncedSlots.map((s) => s.url).filter(Boolean);
+    const imageUrls = type !== 'reel' ? syncedSlots.map((s) => s.url).filter(Boolean) : [];
 
     onGenerate({
       theme: trimmed,
       type,
-      slides_count: type === 'carousel' ? slidesCount : undefined,
+      slides_count: type === 'carousel' ? slidesCount : type === 'reel' ? slidesCount : undefined,
       image_urls: imageUrls,
     });
   };
@@ -105,7 +105,7 @@ export default function ContentGeneratorForm({ onGenerate, loading }: Props) {
 
       {/* Tipo */}
       <div className={styles.field}>
-        <span className={styles.label}>Tipo de post</span>
+        <span className={styles.label}>Tipo de conteúdo</span>
         <div className={styles.typeToggle}>
           <button
             type="button"
@@ -125,61 +125,79 @@ export default function ContentGeneratorForm({ onGenerate, loading }: Props) {
             <span className={styles.typeIcon}>📑</span>
             Carrossel
           </button>
+          <button
+            type="button"
+            className={`${styles.typeBtn} ${type === 'reel' ? styles.typeBtnActive : ''}`}
+            onClick={() => { setType('reel'); setSlots([]); setSlidesCount(4); }}
+            disabled={loading}
+          >
+            <span className={styles.typeIcon}>🎬</span>
+            Reel
+          </button>
         </div>
       </div>
 
-      {/* Slides (apenas carousel) */}
-      {type === 'carousel' && (
+      {/* Slides (carousel) ou Cenas (reel) */}
+      {(type === 'carousel' || type === 'reel') && (
         <div className={styles.field}>
           <label className={styles.label} htmlFor="slides">
-            Número de slides
+            {type === 'carousel' ? 'Número de slides' : 'Número de cenas'}
             <span className={styles.slidesValue}>{slidesCount}</span>
           </label>
           <input
             id="slides"
             type="range"
-            min={2}
-            max={10}
+            min={type === 'reel' ? 3 : 2}
+            max={type === 'reel' ? 6 : 10}
             value={slidesCount}
             onChange={(e) => {
               const n = Number(e.target.value);
               setSlidesCount(n);
-              setSlots(Array.from({ length: n }, (_, i) => slots[i] ?? emptySlot()));
+              if (type === 'carousel') {
+                setSlots(Array.from({ length: n }, (_, i) => slots[i] ?? emptySlot()));
+              }
             }}
             className={styles.slider}
             disabled={loading}
           />
           <div className={styles.sliderLabels}>
-            <span>2</span>
-            <span>10</span>
+            <span>{type === 'reel' ? 3 : 2}</span>
+            <span>{type === 'reel' ? 6 : 10}</span>
           </div>
+          {type === 'reel' && (
+            <span className={styles.hint}>
+              Cada cena representa ~3–8 segundos de vídeo. A IA vai gerar o roteiro completo.
+            </span>
+          )}
         </div>
       )}
 
-      {/* Imagens */}
-      <div className={styles.field}>
-        <span className={styles.label}>
-          {type === 'single_post' ? 'Imagem do post' : 'Imagens dos slides'}
-        </span>
+      {/* Imagens (post único e carrossel) — não exibido para reel */}
+      {type !== 'reel' && (
+        <div className={styles.field}>
+          <span className={styles.label}>
+            {type === 'single_post' ? 'Imagem do post' : 'Imagens dos slides'}
+          </span>
 
-        {syncedSlots.map((slot, i) => (
-          <ImagePicker
-            key={i}
-            label={type === 'carousel' ? `Slide ${i + 1}` : undefined}
-            slot={slot}
-            disabled={loading}
-            onChange={(file) => handleFileChange(i, file)}
-            onClear={() => {
-              if (slot.preview) URL.revokeObjectURL(slot.preview);
-              updateSlot(i, emptySlot());
-            }}
-          />
-        ))}
+          {syncedSlots.map((slot, i) => (
+            <ImagePicker
+              key={i}
+              label={type === 'carousel' ? `Slide ${i + 1}` : undefined}
+              slot={slot}
+              disabled={loading}
+              onChange={(file) => handleFileChange(i, file)}
+              onClear={() => {
+                if (slot.preview) URL.revokeObjectURL(slot.preview);
+                updateSlot(i, emptySlot());
+              }}
+            />
+          ))}
 
-        <span className={styles.hint}>
-          JPEG, PNG ou WebP · máx. 10 MB · {type === 'carousel' ? 'uma por slide' : 'proporção 1:1 ou 4:5 recomendada'}
-        </span>
-      </div>
+          <span className={styles.hint}>
+            JPEG, PNG ou WebP · máx. 10 MB · {type === 'carousel' ? 'uma por slide' : 'proporção 1:1 ou 4:5 recomendada'}
+          </span>
+        </div>
+      )}
 
       <button
         type="submit"

@@ -22,7 +22,7 @@ from app.models.schemas import (
     ContentUpdateRequest,
     SlideResponse,
 )
-from app.services import ai_service
+from app.services import ai_service, image_service
 from app.services.supabase_service import get_table, supabase
 
 logger = logging.getLogger(__name__)
@@ -94,9 +94,12 @@ async def generate_content(payload: ContentGenerateRequest):
     4. Persiste content_project e content_slides.
     5. Retorna o projeto completo com slides aninhados.
     """
-    effective_slides = (
-        1 if payload.type == "single_post" else (payload.slides_count or 3)
-    )
+    if payload.type == "single_post":
+        effective_slides = 1
+    elif payload.type == "reel":
+        effective_slides = payload.slides_count or 4
+    else:
+        effective_slides = payload.slides_count or 3
 
     # 1. Geração via IA
     try:
@@ -302,8 +305,10 @@ async def list_projects(limit: int = 20, offset: int = 0):
     ]
 
 
-ALLOWED_MIME = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
-MAX_SIZE = 10 * 1024 * 1024  # 10 MB
+ALLOWED_IMAGE_MIME = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+ALLOWED_VIDEO_MIME = {"video/mp4", "video/quicktime"}
+MAX_IMAGE_SIZE = 10 * 1024 * 1024    # 10 MB
+MAX_VIDEO_SIZE = 100 * 1024 * 1024   # 100 MB
 
 
 @router.post("/upload-image")
@@ -312,14 +317,14 @@ async def upload_content_image(file: UploadFile = File(...)):
     Faz upload de uma imagem para o bucket content-media no Supabase Storage.
     Retorna a URL pública do arquivo.
     """
-    if file.content_type not in ALLOWED_MIME:
+    if file.content_type not in ALLOWED_IMAGE_MIME:
         raise HTTPException(
             status_code=422,
             detail=f"Tipo de arquivo não suportado: {file.content_type}. Use JPEG, PNG ou WebP.",
         )
 
     content = await file.read()
-    if len(content) > MAX_SIZE:
+    if len(content) > MAX_IMAGE_SIZE:
         raise HTTPException(status_code=422, detail="Arquivo muito grande. Máximo 10 MB.")
 
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "jpg"
@@ -338,3 +343,95 @@ async def upload_content_image(file: UploadFile = File(...)):
     public_url = supabase.storage.from_("content-media").get_public_url(storage_path)
     logger.info("Imagem enviada: %s", public_url)
     return {"url": public_url}
+
+
+@router.post("/upload-video")
+async def upload_content_video(file: UploadFile = File(...)):
+    """
+    Faz upload de um vídeo para o bucket content-media no Supabase Storage.
+    Aceita MP4 e MOV. Máximo 100 MB.
+    Retorna a URL pública do arquivo (usada para publicar Reels).
+    """
+    if file.content_type not in ALLOWED_VIDEO_MIME:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Tipo de arquivo não suportado: {file.content_type}. Use MP4 ou MOV.",
+        )
+
+    content = await file.read()
+    if len(content) > MAX_VIDEO_SIZE:
+        raise HTTPException(status_code=422, detail="Vídeo muito grande. Máximo 100 MB.")
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "mp4"
+    storage_path = f"videos/{uuid.uuid4()}.{ext}"
+
+    try:
+        supabase.storage.from_("content-media").upload(
+            path=storage_path,
+            file=content,
+            file_options={"content-type": file.content_type},
+        )
+    except Exception as exc:
+        logger.error("Erro ao fazer upload do vídeo: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Falha no upload: {exc}")
+
+    public_url = supabase.storage.from_("content-media").get_public_url(storage_path)
+    logger.info("Vídeo enviado: %s", public_url)
+    return {"url": public_url}
+
+
+@router.post("/{project_id}/slides/{slide_id}/generate-image")
+async def generate_slide_image(project_id: str, slide_id: str):
+    """
+    Gera uma imagem via DALL-E 3 usando o visual_prompt do slide.
+    Persiste no Supabase Storage e atualiza media_url do slide.
+    Retorna a URL pública da imagem gerada.
+    """
+    # Verifica que o projeto pertence ao usuário
+    proj_result = (
+        get_table(TABLE_PROJECTS)
+        .select("id")
+        .eq("id", project_id)
+        .eq("user_id", USER_ID)
+        .limit(1)
+        .execute()
+    )
+    if not proj_result.data:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
+    # Busca o slide
+    slide_result = (
+        get_table(TABLE_SLIDES)
+        .select("id, visual_prompt")
+        .eq("id", slide_id)
+        .eq("project_id", project_id)
+        .limit(1)
+        .execute()
+    )
+    if not slide_result.data:
+        raise HTTPException(status_code=404, detail="Slide não encontrado.")
+
+    slide = slide_result.data[0]
+    visual_prompt = slide.get("visual_prompt") or ""
+    if not visual_prompt:
+        raise HTTPException(
+            status_code=422,
+            detail="Este slide não possui um prompt visual. Edite o slide e adicione um antes de gerar a imagem.",
+        )
+
+    # Gera a imagem via DALL-E 3
+    try:
+        image_url = await image_service.generate_and_store(visual_prompt)
+    except RuntimeError as exc:
+        logger.error("Falha na geração de imagem para slide %s: %s", slide_id, exc)
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    # Atualiza media_url do slide no banco
+    try:
+        get_table(TABLE_SLIDES).update({"media_url": image_url}).eq("id", slide_id).execute()
+    except Exception as exc:
+        logger.error("Erro ao atualizar media_url do slide %s: %s", slide_id, exc)
+        raise HTTPException(status_code=500, detail="Imagem gerada, mas falhou ao salvar no banco.")
+
+    logger.info("Imagem gerada para slide %s: %s", slide_id, image_url)
+    return {"url": image_url, "slide_id": slide_id}
