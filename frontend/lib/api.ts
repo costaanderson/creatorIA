@@ -198,7 +198,7 @@ export async function listContent(): Promise<ContentProjectResponse[]> {
 export interface ContentUpdateRequest {
   caption?: string;
   hashtags?: string[];
-  slides?: Array<{ id: string; title?: string; body?: string; visual_prompt?: string }>;
+  slides?: Array<{ id: string; title?: string; body?: string; visual_prompt?: string; media_url?: string }>;
 }
 
 export async function updateContent(

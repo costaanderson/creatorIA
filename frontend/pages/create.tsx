@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import { ApiError, ContentGenerateRequest, ContentProjectResponse, generateContent, getContent } from '../lib/api';
+import { ApiError, ContentGenerateRequest, ContentProjectResponse, generateContent, getContent, updateContent } from '../lib/api';
 import ContentGeneratorForm from '../components/ContentGeneratorForm';
 import ContentPreview from '../components/ContentPreview';
 import styles from '../styles/create.module.css';
@@ -37,7 +37,27 @@ export default function CreatePage() {
     const capturedImageUrls = request.image_urls ?? [];
     setState({ phase: 'generating' });
     try {
-      const project = await generateContent(request);
+      let project = await generateContent(request);
+
+      // Persiste as URLs de imagem nos slides imediatamente após a geração,
+      // para que a preview funcione ao reabrir o projeto.
+      if (capturedImageUrls.length > 0 && project.slides.length > 0) {
+        const slidesWithImages = project.slides
+          .map((slide, i) => ({
+            id: String(slide.id),
+            media_url: capturedImageUrls[i] ?? undefined,
+          }))
+          .filter((s) => s.media_url);
+
+        if (slidesWithImages.length > 0) {
+          try {
+            project = await updateContent(String(project.id), { slides: slidesWithImages });
+          } catch {
+            // Falha silenciosa: imagens não salvas, mas o conteúdo gerado é exibido normalmente
+          }
+        }
+      }
+
       setState({ phase: 'preview', project, imageUrls: capturedImageUrls });
     } catch (err) {
       const message =

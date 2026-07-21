@@ -133,6 +133,7 @@ class SlideUpdateItem(BaseModel):
     title: Optional[str] = None
     body: Optional[str] = None
     visual_prompt: Optional[str] = None
+    media_url: Optional[str] = None
 
 
 class ContentUpdateRequest(BaseModel):

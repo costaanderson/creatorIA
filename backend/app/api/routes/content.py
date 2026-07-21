@@ -226,6 +226,8 @@ async def update_project(project_id: str, payload: ContentUpdateRequest):
                 slide_update["body"] = slide_item.body
             if slide_item.visual_prompt is not None:
                 slide_update["visual_prompt"] = slide_item.visual_prompt
+            if slide_item.media_url is not None:
+                slide_update["media_url"] = slide_item.media_url
             if slide_update:
                 try:
                     get_table(TABLE_SLIDES).update(slide_update).eq("id", slide_item.id).execute()
