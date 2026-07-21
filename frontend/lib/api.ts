@@ -211,6 +211,10 @@ export async function updateContent(
   });
 }
 
+export async function deleteContent(id: string): Promise<void> {
+  await request<unknown>(`/content/${id}`, { method: 'DELETE' });
+}
+
 export interface PublishResponse {
   status: string;
   instagram_media_id?: string;

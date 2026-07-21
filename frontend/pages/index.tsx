@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, ContentProjectResponse, listContent } from '../lib/api';
+import { ApiError, ContentProjectResponse, deleteContent, listContent } from '../lib/api';
+import ErrorMessage from '../components/ErrorMessage';
 
 type ListState =
   | { status: 'loading' }
@@ -28,6 +29,8 @@ function formatDate(iso: string): string {
 
 export default function Home() {
   const [listState, setListState] = useState<ListState>({ status: 'loading' });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setListState({ status: 'loading' });
@@ -40,6 +43,26 @@ export default function Home() {
       setListState({ status: 'error', message });
     }
   }, []);
+
+  const handleDelete = async (e: React.MouseEvent, projectId: string, theme: string) => {
+    e.preventDefault();
+    if (!confirm(`Excluir o projeto "${theme}"? Esta ação não pode ser desfeita.`)) return;
+    setDeletingId(projectId);
+    setDeleteError(null);
+    try {
+      await deleteContent(projectId);
+      setListState((prev) =>
+        prev.status === 'ready'
+          ? { ...prev, projects: prev.projects.filter((p) => p.id !== projectId) }
+          : prev
+      );
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Erro ao excluir o projeto.';
+      setDeleteError(message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -118,6 +141,14 @@ export default function Home() {
           </Link>
         </div>
 
+        {/* Delete error banner */}
+        {deleteError && (
+          <ErrorMessage
+            message={deleteError}
+            onDismiss={() => setDeleteError(null)}
+          />
+        )}
+
         {/* Projects list */}
         <div
           style={{
@@ -172,22 +203,8 @@ export default function Home() {
           )}
 
           {listState.status === 'error' && (
-            <div style={{ padding: '2rem 1.5rem', textAlign: 'center', color: '#b91c1c' }}>
-              <p style={{ fontSize: '0.875rem', margin: '0 0 0.75rem' }}>{listState.message}</p>
-              <button
-                onClick={load}
-                style={{
-                  padding: '0.5rem 1.25rem',
-                  border: '1.5px solid #e5e7eb',
-                  borderRadius: 8,
-                  background: '#fff',
-                  fontSize: '0.875rem',
-                  cursor: 'pointer',
-                  color: '#374151',
-                }}
-              >
-                Tentar novamente
-              </button>
+            <div style={{ padding: '1.25rem 1.5rem' }}>
+              <ErrorMessage message={listState.message} onRetry={load} />
             </div>
           )}
 
@@ -218,26 +235,37 @@ export default function Home() {
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
               {listState.projects.map((p, i) => {
                 const { text, color } = statusLabel(p.status);
+                const typeLabel =
+                  p.type === 'carousel'
+                    ? `📑 Carrossel · ${p.slides_count} slides`
+                    : p.type === 'reel'
+                    ? `🎬 Reel · ${p.slides_count} cenas`
+                    : '🖼️ Post único';
+                const isDeleting = deletingId === p.id;
                 return (
                   <li
                     key={p.id}
                     style={{
                       borderBottom:
                         i < listState.projects.length - 1 ? '1px solid #f3f4f6' : 'none',
+                      display: 'flex',
+                      alignItems: 'center',
                     }}
                   >
                     <Link
                       href={`/create?id=${p.id}`}
                       style={{
+                        flex: 1,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         gap: '1rem',
-                        padding: '1rem 1.5rem',
+                        padding: '1rem 1rem 1rem 1.5rem',
                         textDecoration: 'none',
                         cursor: 'pointer',
                         transition: 'background 0.12s',
                         background: 'transparent',
+                        minWidth: 0,
                       }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = '#f9fafb'; }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'transparent'; }}
@@ -256,10 +284,7 @@ export default function Home() {
                           {p.theme}
                         </span>
                         <span style={{ fontSize: '0.8125rem', color: '#9ca3af' }}>
-                          {p.type === 'carousel'
-                            ? `📑 Carrossel · ${p.slides_count} slides`
-                            : '🖼️ Post único'}{' '}
-                          · {formatDate(p.created_at)}
+                          {typeLabel} · {formatDate(p.created_at)}
                         </span>
                       </div>
                       <span
@@ -274,6 +299,35 @@ export default function Home() {
                         {text}
                       </span>
                     </Link>
+                    <button
+                      onClick={(e) => handleDelete(e, p.id, p.theme)}
+                      disabled={isDeleting}
+                      title="Excluir projeto"
+                      style={{
+                        flexShrink: 0,
+                        padding: '0.5rem 0.75rem',
+                        marginRight: '0.75rem',
+                        background: 'none',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: 7,
+                        color: isDeleting ? '#d1d5db' : '#9ca3af',
+                        cursor: isDeleting ? 'not-allowed' : 'pointer',
+                        fontSize: '0.875rem',
+                        transition: 'color 0.12s, border-color 0.12s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isDeleting) {
+                          (e.currentTarget as HTMLButtonElement).style.color = '#dc2626';
+                          (e.currentTarget as HTMLButtonElement).style.borderColor = '#fca5a5';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.color = '#9ca3af';
+                        (e.currentTarget as HTMLButtonElement).style.borderColor = '#e5e7eb';
+                      }}
+                    >
+                      {isDeleting ? '…' : '🗑'}
+                    </button>
                   </li>
                 );
               })}

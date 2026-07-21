@@ -9,6 +9,7 @@ import {
   uploadContentVideo,
   ApiError,
 } from '../lib/api';
+import ErrorMessage from './ErrorMessage';
 import InstagramPreview from './InstagramPreview';
 import styles from '../styles/ContentPreview.module.css';
 
@@ -453,7 +454,10 @@ export default function ContentPreview({ project, onNewContent, onUpdated, prese
                   </>
                 )}
                 {publishState.status === 'error' && (
-                  <p className={styles.publishError}>{publishState.message}</p>
+                  <ErrorMessage
+                    message={publishState.message}
+                    onDismiss={() => setPublishState({ status: 'awaiting_url' })}
+                  />
                 )}
                 <div className={styles.urlButtons}>
                   <button

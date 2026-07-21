@@ -246,6 +246,30 @@ async def update_project(project_id: str, payload: ContentUpdateRequest):
     return _build_project_response(project, slides)
 
 
+@router.delete("/{project_id}", status_code=204)
+async def delete_project(project_id: str):
+    """Remove um projeto e todos os seus slides do banco."""
+    result = (
+        get_table(TABLE_PROJECTS)
+        .select("id")
+        .eq("id", project_id)
+        .eq("user_id", USER_ID)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Projeto não encontrado.")
+
+    try:
+        get_table(TABLE_SLIDES).delete().eq("project_id", project_id).execute()
+        get_table(TABLE_PROJECTS).delete().eq("id", project_id).execute()
+    except Exception as exc:
+        logger.error("Erro ao deletar projeto %s: %s", project_id, exc)
+        raise HTTPException(status_code=500, detail="Erro ao remover o projeto.")
+
+    logger.info("Projeto removido: id=%s", project_id)
+
+
 @router.get("/{project_id}", response_model=ContentProjectResponse)
 async def get_project(project_id: str):
     """Retorna um projeto de conteúdo com todos os seus slides."""
