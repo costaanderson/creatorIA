@@ -2,8 +2,9 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 load_dotenv()
 
@@ -26,6 +27,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """
+    Captura exceções não tratadas e garante que os headers CORS estejam presentes
+    na resposta de erro 500, evitando que o browser bloqueie a resposta por CORS.
+    """
+    logger.exception("Erro interno não tratado em %s %s", request.method, request.url.path)
+    origin = request.headers.get("origin", "")
+    cors_headers: dict[str, str] = {}
+    if origin in _ALLOWED_ORIGINS:
+        cors_headers["Access-Control-Allow-Origin"] = origin
+        cors_headers["Access-Control-Allow-Credentials"] = "true"
+
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Ocorreu um erro interno no servidor. Tente novamente em instantes."},
+        headers=cors_headers,
+    )
 
 app.include_router(instagram_auth.router)
 app.include_router(brand_kit.router)

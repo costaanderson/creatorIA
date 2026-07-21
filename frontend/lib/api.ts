@@ -62,7 +62,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
     });
   } catch {
-    throw new ApiError(0, 'Não foi possível conectar ao servidor. Verifique se o backend está rodando.');
+    throw new ApiError(0, 'Não foi possível completar a operação. Verifique sua conexão e tente novamente.');
   }
 
   if (!response.ok) {
@@ -118,7 +118,7 @@ export async function uploadIdentityFile(file: File): Promise<BrandKitExtraction
       // Não definir Content-Type: o browser adiciona boundary do multipart automaticamente
     });
   } catch {
-    throw new ApiError(0, 'Não foi possível conectar ao servidor. Verifique se o backend está rodando.');
+    throw new ApiError(0, 'Não foi possível completar a operação. Verifique sua conexão e tente novamente.');
   }
 
   if (!response.ok) {
