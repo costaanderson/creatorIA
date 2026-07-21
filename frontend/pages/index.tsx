@@ -32,6 +32,7 @@ export default function Home() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [unpublishingId, setUnpublishingId] = useState<string | null>(null);
+  const [archiveNotice, setArchiveNotice] = useState(false);
 
   const load = useCallback(async () => {
     setListState({ status: 'loading' });
@@ -47,7 +48,7 @@ export default function Home() {
 
   const handleUnpublish = async (e: React.MouseEvent, projectId: string) => {
     e.preventDefault();
-    if (!confirm('Remover este post do Instagram? O projeto voltará para Rascunho.')) return;
+    if (!confirm('Arquivar este projeto?\n\nO status voltará para Rascunho aqui no app, mas o post no Instagram precisa ser removido manualmente por você.')) return;
     setUnpublishingId(projectId);
     setDeleteError(null);
     try {
@@ -64,6 +65,7 @@ export default function Home() {
             }
           : prev
       );
+      setArchiveNotice(true);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Erro ao despublicar o projeto.';
       setDeleteError(message);
@@ -175,6 +177,35 @@ export default function Home() {
             message={deleteError}
             onDismiss={() => setDeleteError(null)}
           />
+        )}
+
+        {/* Archive notice */}
+        {archiveNotice && (
+          <div
+            role="alert"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.75rem',
+              padding: '0.875rem 1rem',
+              background: '#fffbeb',
+              border: '1px solid #fcd34d',
+              borderRadius: 10,
+              fontSize: '0.875rem',
+              color: '#92400e',
+            }}
+          >
+            <span style={{ flexShrink: 0 }}>⚠️</span>
+            <span style={{ flex: 1 }}>
+              Projeto arquivado no app. O post ainda está no Instagram — remova-o manualmente pelo app do Instagram ou pelo Meta Business Suite.
+            </span>
+            <button
+              onClick={() => setArchiveNotice(false)}
+              style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: '1rem' }}
+            >
+              ✕
+            </button>
+          </div>
         )}
 
         {/* Projects list */}
@@ -336,7 +367,7 @@ export default function Home() {
                         <button
                           onClick={(e) => handleUnpublish(e, p.id)}
                           disabled={isBusy}
-                          title="Despublicar do Instagram"
+                          title="Arquivar projeto (reseta para Rascunho no app)"
                           style={{
                             padding: '0.375rem 0.625rem',
                             background: 'none',
@@ -360,7 +391,7 @@ export default function Home() {
                             (e.currentTarget as HTMLButtonElement).style.borderColor = '#e5e7eb';
                           }}
                         >
-                          {isUnpublishing ? '…' : '↩ Despublicar'}
+                          {isUnpublishing ? '…' : '↩ Arquivar'}
                         </button>
                       )}
                       <button

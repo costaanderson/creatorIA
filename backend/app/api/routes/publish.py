@@ -179,31 +179,16 @@ async def publish_project(project_id: str, body: PublishRequest = PublishRequest
 @router.post("/unpublish/{project_id}", response_model=PublishResponse)
 async def unpublish_project(project_id: str):
     """
-    Remove o post do Instagram e reseta o projeto para status 'draft'.
-    Requer que o projeto tenha instagram_media_id salvo.
+    Arquiva o projeto localmente: reseta status para 'draft' e limpa os campos do Instagram.
+    Nota: a Meta API não permite deletar posts publicados via API para contas Business.
+    O post no Instagram deve ser removido manualmente pelo usuário.
     """
     project = _get_project(project_id)
 
     if project["status"] != "published":
         raise HTTPException(
             status_code=409,
-            detail="Apenas projetos com status 'published' podem ser despublicados.",
-        )
-
-    media_id = project.get("instagram_media_id")
-    if not media_id:
-        raise HTTPException(
-            status_code=422,
-            detail="ID da mídia no Instagram não encontrado. Não é possível despublicar.",
-        )
-
-    try:
-        await publishing_service.delete_media(media_id)
-    except RuntimeError as exc:
-        logger.error("Falha ao despublicar projeto %s: %s", project_id, exc)
-        raise HTTPException(
-            status_code=502,
-            detail=f"Erro ao remover post do Instagram: {exc}",
+            detail="Apenas projetos com status 'published' podem ser arquivados.",
         )
 
     _update_project(project_id, {
@@ -213,9 +198,9 @@ async def unpublish_project(project_id: str):
         "error_message": None,
     })
 
-    logger.info("Projeto %s despublicado (media_id=%s removido).", project_id, media_id)
+    logger.info("Projeto %s arquivado localmente (voltou para draft).", project_id)
 
     return PublishResponse(
         status="draft",
-        message="Post removido do Instagram. O projeto voltou para rascunho.",
+        message="Projeto arquivado. Lembre-se de remover o post manualmente no Instagram.",
     )
