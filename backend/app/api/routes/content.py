@@ -86,11 +86,11 @@ def _fetch_slides(project_id: str) -> list[dict]:
 @router.post("/generate", response_model=ContentProjectResponse, status_code=201)
 async def generate_content(payload: ContentGenerateRequest):
     """
-    Gera um post ou carrossel para Instagram usando o Grok-3.
+    Gera um post ou carrossel para Instagram usando o gpt-4o (OpenAI).
 
     1. Busca o Brand Kit do usuário no Supabase.
     2. Monta prompt de sistema com identidade da marca.
-    3. Chama grok-3 e faz parse do JSON retornado.
+    3. Chama gpt-4o e faz parse do JSON retornado.
     4. Persiste content_project e content_slides.
     5. Retorna o projeto completo com slides aninhados.
     """
@@ -107,12 +107,12 @@ async def generate_content(payload: ContentGenerateRequest):
             slides_count=effective_slides,
         )
     except RuntimeError as exc:
-        # Falha de rede / timeout / quota da xAI
-        logger.error("Falha na API da xAI: %s", exc)
+        # Falha de rede / timeout / quota da OpenAI
+        logger.error("Falha na API da OpenAI: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc))
     except ValueError as exc:
         # Resposta da IA irrecuperável (JSON malformado, estrutura ausente)
-        logger.error("Resposta inválida do Grok: %s", exc)
+        logger.error("Resposta inválida do gpt-4o: %s", exc)
         raise HTTPException(
             status_code=422,
             detail=(
@@ -276,12 +276,30 @@ async def list_projects(limit: int = 20, offset: int = 0):
     )
 
     projects = result.data or []
-    response = []
-    for project in projects:
-        slides = _fetch_slides(project["id"])
-        response.append(_build_project_response(project, slides))
+    if not projects:
+        return []
 
-    return response
+    # Busca todos os slides de uma vez (evita N+1 queries)
+    project_ids = [p["id"] for p in projects]
+    slides_result = (
+        get_table(TABLE_SLIDES)
+        .select("*")
+        .in_("project_id", project_ids)
+        .order("slide_order", desc=False)
+        .execute()
+    )
+    all_slides = slides_result.data or []
+
+    # Agrupa slides por project_id em memória
+    slides_by_project: dict[str, list[dict]] = {}
+    for slide in all_slides:
+        pid = slide["project_id"]
+        slides_by_project.setdefault(pid, []).append(slide)
+
+    return [
+        _build_project_response(project, slides_by_project.get(project["id"], []))
+        for project in projects
+    ]
 
 
 ALLOWED_MIME = {"image/jpeg", "image/jpg", "image/png", "image/webp"}

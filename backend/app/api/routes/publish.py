@@ -112,13 +112,13 @@ async def publish_project(project_id: str, body: PublishRequest = PublishRequest
 
     try:
         if content_type == "single_post":
-            result = publishing_service.publish_single_post(
+            result = await publishing_service.publish_single_post(
                 image_url=image_urls[0],
                 caption=caption,
                 hashtags=hashtags,
             )
         else:
-            result = publishing_service.publish_carousel(
+            result = await publishing_service.publish_carousel(
                 image_urls=image_urls,
                 caption=caption,
                 hashtags=hashtags,

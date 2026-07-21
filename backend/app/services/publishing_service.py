@@ -15,8 +15,8 @@ Fluxo para carrossel:
   5. Publica via media_publish
 """
 
+import asyncio
 import logging
-import time
 from typing import Optional
 
 import httpx
@@ -45,10 +45,10 @@ def _ig_id() -> str:
     return config.INSTAGRAM_BUSINESS_ID
 
 
-def _wait_ready(client: httpx.Client, container_id: str) -> None:
+async def _wait_ready(client: httpx.AsyncClient, container_id: str) -> None:
     """Aguarda o container ficar com status FINISHED. Lança RuntimeError em caso de erro/timeout."""
     for attempt in range(_MAX_POLL):
-        resp = client.get(
+        resp = await client.get(
             f"{_base()}/{container_id}",
             params={"fields": "status_code", "access_token": _token()},
             timeout=15,
@@ -60,20 +60,20 @@ def _wait_ready(client: httpx.Client, container_id: str) -> None:
         if status == "ERROR":
             raise RuntimeError(f"Container {container_id} retornou erro na Meta: {resp.json()}")
         logger.debug("Container %s aguardando... tentativa %d status=%s", container_id, attempt + 1, status)
-        time.sleep(_POLL_INTERVAL)
+        await asyncio.sleep(_POLL_INTERVAL)
 
     raise RuntimeError(f"Timeout: container {container_id} não ficou pronto em {_MAX_POLL * _POLL_INTERVAL}s")
 
 
-def _create_single_container(
-    client: httpx.Client,
+async def _create_single_container(
+    client: httpx.AsyncClient,
     image_url: str,
     caption: str,
     hashtags: list[str],
 ) -> str:
     """Cria container para post único. Retorna o container ID."""
     full_caption = f"{caption}\n\n{' '.join(hashtags)}" if hashtags else caption
-    resp = client.post(
+    resp = await client.post(
         f"{_base()}/{_ig_id()}/media",
         data={
             "access_token": _token(),
@@ -90,9 +90,9 @@ def _create_single_container(
     return result["id"]
 
 
-def _create_carousel_item(client: httpx.Client, image_url: str) -> str:
+async def _create_carousel_item(client: httpx.AsyncClient, image_url: str) -> str:
     """Cria um item de carrossel (sem caption). Retorna o container ID."""
-    resp = client.post(
+    resp = await client.post(
         f"{_base()}/{_ig_id()}/media",
         data={
             "access_token": _token(),
@@ -108,15 +108,15 @@ def _create_carousel_item(client: httpx.Client, image_url: str) -> str:
     return result["id"]
 
 
-def _create_carousel_container(
-    client: httpx.Client,
+async def _create_carousel_container(
+    client: httpx.AsyncClient,
     children_ids: list[str],
     caption: str,
     hashtags: list[str],
 ) -> str:
     """Cria o container principal do carrossel. Retorna o container ID."""
     full_caption = f"{caption}\n\n{' '.join(hashtags)}" if hashtags else caption
-    resp = client.post(
+    resp = await client.post(
         f"{_base()}/{_ig_id()}/media",
         data={
             "access_token": _token(),
@@ -133,9 +133,9 @@ def _create_carousel_container(
     return result["id"]
 
 
-def _publish_container(client: httpx.Client, container_id: str) -> str:
+async def _publish_container(client: httpx.AsyncClient, container_id: str) -> str:
     """Publica o container. Retorna o media ID do post publicado."""
-    resp = client.post(
+    resp = await client.post(
         f"{_base()}/{_ig_id()}/media_publish",
         data={
             "access_token": _token(),
@@ -150,7 +150,7 @@ def _publish_container(client: httpx.Client, container_id: str) -> str:
     return result["id"]
 
 
-def publish_single_post(
+async def publish_single_post(
     image_url: str,
     caption: str,
     hashtags: list[str],
@@ -162,19 +162,18 @@ def publish_single_post(
         dict com "media_id" e "post_url"
     """
     logger.info("Publicando post único. image_url=%s", image_url)
-    with httpx.Client() as client:
-        container_id = _create_single_container(client, image_url, caption, hashtags)
+    async with httpx.AsyncClient() as client:
+        container_id = await _create_single_container(client, image_url, caption, hashtags)
         logger.info("Container criado: %s — aguardando processamento...", container_id)
-        _wait_ready(client, container_id)
-        media_id = _publish_container(client, container_id)
+        await _wait_ready(client, container_id)
+        media_id = await _publish_container(client, container_id)
 
-    ig_handle = _get_ig_handle()
     post_url = f"https://www.instagram.com/p/{_media_id_to_shortcode(media_id)}/" if media_id else None
     logger.info("Post único publicado. media_id=%s", media_id)
     return {"media_id": media_id, "post_url": post_url}
 
 
-def publish_carousel(
+async def publish_carousel(
     image_urls: list[str],
     caption: str,
     hashtags: list[str],
@@ -194,40 +193,26 @@ def publish_carousel(
         raise ValueError("Carrossel suporta no máximo 10 imagens.")
 
     logger.info("Publicando carrossel com %d slides.", len(image_urls))
-    with httpx.Client() as client:
+    async with httpx.AsyncClient() as client:
         # 1. Criar e aguardar cada item
         children_ids: list[str] = []
         for i, url in enumerate(image_urls, start=1):
-            item_id = _create_carousel_item(client, url)
+            item_id = await _create_carousel_item(client, url)
             logger.info("Item %d/%d criado: %s — aguardando...", i, len(image_urls), item_id)
-            _wait_ready(client, item_id)
+            await _wait_ready(client, item_id)
             children_ids.append(item_id)
 
         # 2. Container principal
-        carousel_id = _create_carousel_container(client, children_ids, caption, hashtags)
+        carousel_id = await _create_carousel_container(client, children_ids, caption, hashtags)
         logger.info("Container do carrossel criado: %s — aguardando...", carousel_id)
-        _wait_ready(client, carousel_id)
+        await _wait_ready(client, carousel_id)
 
         # 3. Publicar
-        media_id = _publish_container(client, carousel_id)
+        media_id = await _publish_container(client, carousel_id)
 
     post_url = f"https://www.instagram.com/p/{_media_id_to_shortcode(media_id)}/" if media_id else None
     logger.info("Carrossel publicado. media_id=%s", media_id)
     return {"media_id": media_id, "post_url": post_url}
-
-
-def _get_ig_handle() -> Optional[str]:
-    """Tenta recuperar o @handle da conta via API (melhor esforço)."""
-    try:
-        with httpx.Client() as client:
-            resp = client.get(
-                f"{_base()}/{_ig_id()}",
-                params={"fields": "username", "access_token": _token()},
-                timeout=10,
-            )
-            return resp.json().get("username")
-    except Exception:
-        return None
 
 
 def _media_id_to_shortcode(media_id: str) -> str:

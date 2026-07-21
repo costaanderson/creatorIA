@@ -4,7 +4,7 @@ Motor de geração de conteúdo para Instagram — Fase 3.
 Fluxo:
   1. Busca o Brand Kit do usuário no Supabase.
   2. Monta prompt de sistema com identidade da marca (cores, tom de voz).
-  3. Chama grok-3 (xAI) exigindo resposta em JSON estrito.
+  3. Chama gpt-4o (OpenAI) exigindo resposta em JSON estrito.
   4. Faz parse robusto da resposta (tolerante a lixo textual ao redor do JSON).
   5. Valida estrutura mínima e retorna dados prontos para persistência.
 
@@ -94,16 +94,22 @@ _CAROUSEL_INSTRUCTION = (
 )
 
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
+# ─── Cliente OpenAI (singleton) ──────────────────────────────────────────────
+
+_openai_client: OpenAI | None = None
+
 
 def _build_client() -> OpenAI:
-    if not config.OPENAI_API_KEY:
-        raise RuntimeError("OPENAI_API_KEY não configurada no .env")
-    return OpenAI(
-        api_key=config.OPENAI_API_KEY,
-        base_url=config.OPENAI_BASE_URL,
-        timeout=90.0,
-    )
+    global _openai_client
+    if _openai_client is None:
+        if not config.OPENAI_API_KEY:
+            raise RuntimeError("OPENAI_API_KEY não configurada no .env")
+        _openai_client = OpenAI(
+            api_key=config.OPENAI_API_KEY,
+            base_url=config.OPENAI_BASE_URL,
+            timeout=90.0,
+        )
+    return _openai_client
 
 
 def _fetch_brand_kit(user_id: str) -> dict[str, Any]:
@@ -154,7 +160,7 @@ def _build_system_prompt(
 
 def _extract_json(raw: str) -> dict[str, Any]:
     """
-    Extrai o objeto JSON da resposta do Grok com múltiplas estratégias de fallback.
+    Extrai o objeto JSON da resposta do gpt-4o com múltiplas estratégias de fallback.
 
     Estratégias (em ordem):
       1. Parse direto da string limpa.
@@ -185,7 +191,7 @@ def _extract_json(raw: str) -> dict[str, Any]:
         except json.JSONDecodeError:
             pass
 
-    raise ValueError(f"Não foi possível extrair JSON válido da resposta do Grok. Raw: {raw[:300]!r}")
+    raise ValueError(f"Não foi possível extrair JSON válido da resposta do gpt-4o. Raw: {raw[:300]!r}")
 
 
 def _validate_and_build(
@@ -200,7 +206,7 @@ def _validate_and_build(
     """
     caption: str = parsed.get("caption") or ""
     if not caption:
-        raise ValueError("Resposta do Grok não contém 'caption'.")
+        raise ValueError("Resposta do gpt-4o não contém 'caption'.")
 
     # Trunca caption a 2200 chars (limite do Instagram)
     caption = caption[:2200]
@@ -215,12 +221,12 @@ def _validate_and_build(
 
     # Garante pelo menos uma hashtag para não quebrar o schema
     if not hashtags:
-        logger.warning("Grok não retornou hashtags; usando fallback genérico.")
+        logger.warning("gpt-4o não retornou hashtags; usando fallback genérico.")
         hashtags = ["#instagram", "#conteudo", "#criadores"]
 
     raw_slides: list = parsed.get("slides") or []
     if not raw_slides:
-        raise ValueError("Resposta do Grok não contém 'slides'.")
+        raise ValueError("Resposta do gpt-4o não contém 'slides'.")
 
     slides: list[GeneratedSlide] = []
     for i, s in enumerate(raw_slides, start=1):
@@ -241,12 +247,12 @@ def _validate_and_build(
         ))
 
     if not slides:
-        raise ValueError("Nenhum slide válido encontrado na resposta do Grok.")
+        raise ValueError("Nenhum slide válido encontrado na resposta do gpt-4o.")
 
     # Avisa se a contagem difere do esperado, mas não falha
     if len(slides) != expected_slides:
         logger.warning(
-            "Grok retornou %d slides mas %d eram esperados. Prosseguindo com o retornado.",
+            "gpt-4o retornou %d slides mas %d eram esperados. Prosseguindo com o retornado.",
             len(slides),
             expected_slides,
         )
@@ -269,7 +275,7 @@ async def generate_content(
     slides_count: Optional[int] = None,
 ) -> GeneratedContent:
     """
-    Gera conteúdo para Instagram usando o Grok-3.
+    Gera conteúdo para Instagram usando o gpt-4o (OpenAI).
 
     Args:
         user_id:       ID fixo do usuário MVP.
@@ -281,7 +287,7 @@ async def generate_content(
         GeneratedContent com caption, hashtags e slides.
 
     Raises:
-        RuntimeError:  Falha na API da xAI (timeout, quota, etc.).
+        RuntimeError:  Falha na API da OpenAI (timeout, quota, etc.).
         ValueError:    Resposta da IA inválida ou irrecuperável.
     """
     effective_slides = 1 if content_type == "single_post" else (slides_count or 3)
@@ -302,7 +308,7 @@ async def generate_content(
         f"Lembre-se: responda APENAS com o JSON, sem qualquer texto adicional."
     )
 
-    # 3. Chamada ao Grok-3
+    # 3. Chamada ao gpt-4o
     client = _build_client()
     logger.info(
         "Chamando %s: type=%s slides=%d theme_len=%d",
@@ -324,22 +330,22 @@ async def generate_content(
             top_p=0.9,
         )
     except APITimeoutError as exc:
-        logger.error("Timeout na chamada ao GPT-4o: %s", exc)
+        logger.error("Timeout na chamada ao gpt-4o: %s", exc)
         raise RuntimeError(
             "A API da OpenAI não respondeu a tempo. Tente novamente em alguns instantes."
         ) from exc
     except APIError as exc:
-        logger.error("Erro na API do GPT-4o (status=%s): %s", exc.status_code, exc.message)
+        logger.error("Erro na API do gpt-4o (status=%s): %s", exc.status_code, exc.message)
         raise RuntimeError(f"Erro na API da OpenAI: {exc.message}") from exc
 
     raw_text: str = response.choices[0].message.content or ""
-    logger.info("Resposta do Grok-3 recebida (%d chars).", len(raw_text))
+    logger.info("Resposta do gpt-4o recebida (%d chars).", len(raw_text))
 
     # 4. Parse + validação
     try:
         parsed = _extract_json(raw_text)
     except ValueError as exc:
-        logger.error("Falha no parse JSON da resposta do Grok: %s", exc)
+        logger.error("Falha no parse JSON da resposta do gpt-4o: %s", exc)
         raise
 
     result = _validate_and_build(parsed, content_type, effective_slides)
