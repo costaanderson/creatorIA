@@ -79,6 +79,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(response.status, detail);
   }
 
+  // 204 No Content — sem body para parsear
+  if (response.status === 204) return undefined as unknown as T;
+
   return response.json() as Promise<T>;
 }
 
