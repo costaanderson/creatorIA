@@ -4,16 +4,63 @@ import styles from '../styles/ContentGeneratorForm.module.css';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
+// ─── Validação de dimensões ───────────────────────────────────────────────────
+
+interface ValidationResult {
+  ok: boolean;    // passa nos requisitos do Instagram
+  warn: boolean;  // passa, mas não é o ideal
+  message: string;
+  width?: number;
+  height?: number;
+}
+
+function validateImageDimensions(w: number, h: number): ValidationResult {
+  const ratio = w / h;
+
+  if (w < 320) {
+    return { ok: false, warn: false, message: `Muito pequena (${w}×${h}px). Instagram exige mínimo 320px de largura.`, width: w, height: h };
+  }
+  if (ratio < 0.79) {
+    return { ok: false, warn: false, message: `Proporção muito estreita (${w}×${h}px). Máximo: 4:5 — use ex: 1080×1350.`, width: w, height: h };
+  }
+  if (ratio > 1.92) {
+    return { ok: false, warn: false, message: `Proporção muito larga (${w}×${h}px). Máximo: 1.91:1 — use ex: 1080×566.`, width: w, height: h };
+  }
+
+  const isSquare = Math.abs(ratio - 1) < 0.03;
+  const isPortrait = Math.abs(ratio - 0.8) < 0.03;
+
+  if (isSquare) {
+    return { ok: true, warn: false, message: `${w}×${h}px — proporção 1:1, ideal para feed`, width: w, height: h };
+  }
+  if (isPortrait) {
+    return { ok: true, warn: false, message: `${w}×${h}px — proporção 4:5, ocupa mais tela no feed`, width: w, height: h };
+  }
+  return { ok: true, warn: true, message: `${w}×${h}px — aceita pelo Instagram, mas 1:1 ou 4:5 é recomendado`, width: w, height: h };
+}
+
+async function getValidationFromObjectUrl(objectUrl: string): Promise<ValidationResult> {
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => resolve(validateImageDimensions(img.naturalWidth, img.naturalHeight));
+    img.onerror = () => resolve({ ok: true, warn: false, message: 'Não foi possível verificar as dimensões.' });
+    img.src = objectUrl;
+  });
+}
+
+// ─── Slot de imagem ───────────────────────────────────────────────────────────
+
 interface ImageSlot {
   file: File | null;
   url: string;       // URL pública após upload
   preview: string;   // object URL local para preview
   uploading: boolean;
   error: string | null;
+  validation: ValidationResult | null;
 }
 
 function emptySlot(): ImageSlot {
-  return { file: null, url: '', preview: '', uploading: false, error: null };
+  return { file: null, url: '', preview: '', uploading: false, error: null, validation: null };
 }
 
 interface Props {
@@ -43,7 +90,11 @@ export default function ContentGeneratorForm({ onGenerate, loading }: Props) {
     if (!file) return;
 
     const preview = URL.createObjectURL(file);
-    updateSlot(index, { file, preview, uploading: true, error: null, url: '' });
+    updateSlot(index, { file, preview, uploading: true, error: null, url: '', validation: null });
+
+    // Valida dimensões antes de enviar ao backend
+    const validation = await getValidationFromObjectUrl(preview);
+    updateSlot(index, { validation });
 
     try {
       const formData = new FormData();
@@ -194,8 +245,22 @@ export default function ContentGeneratorForm({ onGenerate, loading }: Props) {
           ))}
 
           <span className={styles.hint}>
-            JPEG, PNG ou WebP · máx. 10 MB · {type === 'carousel' ? 'uma por slide' : 'proporção 1:1 ou 4:5 recomendada'}
+            JPEG, PNG ou WebP · máx. 10 MB · recomendado 1080×1080px (1:1) ou 1080×1350px (4:5)
           </span>
+        </div>
+      )}
+
+      {/* Informações de requisitos para Reel */}
+      {type === 'reel' && (
+        <div className={styles.reelInfo}>
+          <p className={styles.reelInfoTitle}>Requisitos de vídeo para Reel</p>
+          <ul className={styles.reelInfoList}>
+            <li>Resolução: <strong>1080×1920px</strong> (proporção 9:16 — vertical)</li>
+            <li>Formato: <strong>MP4 ou MOV</strong></li>
+            <li>Duração máxima: <strong>90 segundos</strong></li>
+            <li>Tamanho máximo: <strong>100 MB</strong></li>
+          </ul>
+          <p className={styles.reelInfoNote}>O upload do vídeo é feito na tela de revisão, após a IA gerar o roteiro.</p>
         </div>
       )}
 
@@ -230,6 +295,22 @@ interface PickerProps {
 function ImagePicker({ label, slot, disabled, onChange, onClear }: PickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const v = slot.validation;
+  const validationClass = v
+    ? v.ok && !v.warn
+      ? styles.validOk
+      : v.ok && v.warn
+      ? styles.validWarn
+      : styles.validError
+    : null;
+  const validationIcon = v
+    ? v.ok && !v.warn
+      ? '✅'
+      : v.ok && v.warn
+      ? '⚠️'
+      : '❌'
+    : null;
+
   return (
     <div className={styles.pickerWrapper}>
       {label && <span className={styles.pickerLabel}>{label}</span>}
@@ -257,25 +338,34 @@ function ImagePicker({ label, slot, disabled, onChange, onClear }: PickerProps) 
           📁 Selecionar arquivo
         </button>
       ) : (
-        <div className={styles.pickerPreview}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={slot.preview} alt="preview" className={styles.previewThumb} />
-          <div className={styles.previewInfo}>
-            <span className={styles.previewName}>{slot.file?.name ?? 'imagem'}</span>
-            {slot.uploading && <span className={styles.uploadingText}>⏳ Enviando…</span>}
-            {slot.url && <span className={styles.uploadedText}>✅ Pronto</span>}
-            {slot.error && <span className={styles.uploadErrorText}>⚠️ {slot.error}</span>}
+        <>
+          <div className={`${styles.pickerPreview} ${v && !v.ok ? styles.pickerPreviewInvalid : ''}`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={slot.preview} alt="preview" className={styles.previewThumb} />
+            <div className={styles.previewInfo}>
+              <span className={styles.previewName}>{slot.file?.name ?? 'imagem'}</span>
+              {slot.uploading && <span className={styles.uploadingText}>⏳ Validando e enviando…</span>}
+              {!slot.uploading && slot.url && !v && <span className={styles.uploadedText}>✅ Pronto</span>}
+              {!slot.uploading && slot.url && v && <span className={styles.uploadedText}>✅ Enviado</span>}
+              {slot.error && <span className={styles.uploadErrorText}>⚠️ {slot.error}</span>}
+            </div>
+            <button
+              type="button"
+              className={styles.pickerClearBtn}
+              onClick={onClear}
+              disabled={disabled || slot.uploading}
+              title="Remover imagem"
+            >
+              ✕
+            </button>
           </div>
-          <button
-            type="button"
-            className={styles.pickerClearBtn}
-            onClick={onClear}
-            disabled={disabled || slot.uploading}
-            title="Remover imagem"
-          >
-            ✕
-          </button>
-        </div>
+
+          {v && (
+            <span className={validationClass ?? undefined}>
+              {validationIcon} {v.message}
+            </span>
+          )}
+        </>
       )}
     </div>
   );

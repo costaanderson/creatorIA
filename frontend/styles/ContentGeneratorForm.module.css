@@ -265,6 +265,73 @@
   color: #dc2626;
 }
 
+/* Validação de dimensões */
+.pickerPreviewInvalid {
+  border-color: #fca5a5;
+  background: #fff5f5;
+}
+
+.validOk {
+  font-size: 0.75rem;
+  color: #059669;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.validWarn {
+  font-size: 0.75rem;
+  color: #b45309;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.validError {
+  font-size: 0.75rem;
+  color: #dc2626;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+/* Info box para Reel */
+.reelInfo {
+  padding: 0.875rem 1rem;
+  background: #f0f9ff;
+  border: 1.5px solid #bae6fd;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.reelInfoTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0369a1;
+  margin: 0;
+}
+
+.reelInfoList {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.reelInfoList li {
+  font-size: 0.8125rem;
+  color: #374151;
+}
+
+.reelInfoNote {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin: 0;
+}
+
 /* Submit */
 .submitBtn {
   display: flex;
