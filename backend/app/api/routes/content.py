@@ -1,7 +1,7 @@
 """
 Rotas de Geração de Conteúdo — Fase 3.
 
-POST /content/generate   → gera conteúdo via xAI e persiste no Supabase
+POST /content/generate   → gera conteúdo via IA e persiste no Supabase
 GET  /content/{id}       → retorna projeto com slides aninhados
 GET  /content            → lista projetos do usuário (mais recentes primeiro)
 """
@@ -12,10 +12,10 @@ import logging
 from datetime import datetime, timezone
 
 import uuid
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from typing import List
 
-from app.core import config
+from app.core.auth import get_current_user
 from app.models.schemas import (
     ContentGenerateRequest,
     ContentProjectResponse,
@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/content", tags=["Content"])
 
-USER_ID = config.MVP_USER_ID
 TABLE_PROJECTS = "content_projects"
 TABLE_SLIDES = "content_slides"
 
@@ -84,7 +83,10 @@ def _fetch_slides(project_id: str) -> list[dict]:
 # ─── Rotas ───────────────────────────────────────────────────────────────────
 
 @router.post("/generate", response_model=ContentProjectResponse, status_code=201)
-async def generate_content(payload: ContentGenerateRequest):
+async def generate_content(
+    payload: ContentGenerateRequest,
+    user: dict = Depends(get_current_user),
+):
     """
     Gera um post ou carrossel para Instagram usando o gpt-4o (OpenAI).
 
@@ -94,6 +96,8 @@ async def generate_content(payload: ContentGenerateRequest):
     4. Persiste content_project e content_slides.
     5. Retorna o projeto completo com slides aninhados.
     """
+    user_id = user["sub"]
+
     if payload.type == "single_post":
         effective_slides = 1
     elif payload.type == "reel":
@@ -101,20 +105,17 @@ async def generate_content(payload: ContentGenerateRequest):
     else:
         effective_slides = payload.slides_count or 3
 
-    # 1. Geração via IA
     try:
         generated = await ai_service.generate_content(
-            user_id=USER_ID,
+            user_id=user_id,
             theme=payload.theme,
             content_type=payload.type,
             slides_count=effective_slides,
         )
     except RuntimeError as exc:
-        # Falha de rede / timeout / quota da OpenAI
         logger.error("Falha na API da OpenAI: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc))
     except ValueError as exc:
-        # Resposta da IA irrecuperável (JSON malformado, estrutura ausente)
         logger.error("Resposta inválida do gpt-4o: %s", exc)
         raise HTTPException(
             status_code=422,
@@ -126,9 +127,8 @@ async def generate_content(payload: ContentGenerateRequest):
 
     now = datetime.now(timezone.utc).isoformat()
 
-    # 2. Persistir content_project
     project_data = {
-        "user_id": USER_ID,
+        "user_id": user_id,
         "type": payload.type,
         "theme": payload.theme,
         "slides_count": len(generated.slides),
@@ -155,7 +155,6 @@ async def generate_content(payload: ContentGenerateRequest):
     project_id = project["id"]
     logger.info("content_project criado: id=%s type=%s", project_id, payload.type)
 
-    # 3. Persistir content_slides
     slides_data = [
         {
             "project_id": project_id,
@@ -172,7 +171,6 @@ async def generate_content(payload: ContentGenerateRequest):
         slides_result = get_table(TABLE_SLIDES).insert(slides_data).execute()
     except Exception as exc:
         logger.error("Erro ao inserir slides no Supabase (project_id=%s): %s", project_id, exc)
-        # Projeto foi criado — retorna sem slides para não perder o conteúdo
         raise HTTPException(
             status_code=500,
             detail="Projeto criado, mas os slides falharam ao salvar. Tente gerar novamente.",
@@ -185,24 +183,28 @@ async def generate_content(payload: ContentGenerateRequest):
 
 
 @router.patch("/{project_id}", response_model=ContentProjectResponse)
-async def update_project(project_id: str, payload: ContentUpdateRequest):
-    """
-    Atualiza parcialmente um projeto de conteúdo (caption, hashtags, slides).
-    """
-    # Verificar existência
+async def update_project(
+    project_id: str,
+    payload: ContentUpdateRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Atualiza parcialmente um projeto de conteúdo (caption, hashtags, slides)."""
+    user_id = user["sub"]
+
     result = (
         get_table(TABLE_PROJECTS)
         .select("*")
         .eq("id", project_id)
-        .eq("user_id", USER_ID)
+        .eq("user_id", user_id)
         .limit(1)
         .execute()
     )
     if not result.data:
         raise HTTPException(status_code=404, detail="Projeto não encontrado.")
 
-    # Atualizar content_projects se necessário
     project_update: dict = {}
+    if payload.theme is not None:
+        project_update["theme"] = payload.theme
     if payload.caption is not None:
         project_update["caption"] = payload.caption
     if payload.hashtags is not None:
@@ -218,7 +220,6 @@ async def update_project(project_id: str, payload: ContentUpdateRequest):
             logger.error("Erro ao atualizar content_project %s: %s", project_id, exc)
             raise HTTPException(status_code=500, detail="Erro ao atualizar o projeto.")
 
-    # Atualizar slides individualmente
     if payload.slides:
         for slide_item in payload.slides:
             slide_update: dict = {}
@@ -237,7 +238,6 @@ async def update_project(project_id: str, payload: ContentUpdateRequest):
                     logger.error("Erro ao atualizar slide %s: %s", slide_item.id, exc)
                     raise HTTPException(status_code=500, detail=f"Erro ao atualizar slide {slide_item.id}.")
 
-    # Retornar projeto atualizado
     updated_result = (
         get_table(TABLE_PROJECTS)
         .select("*")
@@ -251,14 +251,18 @@ async def update_project(project_id: str, payload: ContentUpdateRequest):
 
 
 @router.delete("/{project_id}", status_code=204)
-async def delete_project(project_id: str):
+async def delete_project(
+    project_id: str,
+    user: dict = Depends(get_current_user),
+):
     """
     Remove um projeto e todos os seus slides do banco.
     Idempotente: retorna 204 mesmo que o projeto já não exista.
     """
+    user_id = user["sub"]
     try:
         get_table(TABLE_SLIDES).delete().eq("project_id", project_id).execute()
-        get_table(TABLE_PROJECTS).delete().eq("id", project_id).eq("user_id", USER_ID).execute()
+        get_table(TABLE_PROJECTS).delete().eq("id", project_id).eq("user_id", user_id).execute()
     except Exception as exc:
         logger.error("Erro ao deletar projeto %s: %s", project_id, exc)
         raise HTTPException(status_code=500, detail="Erro ao remover o projeto.")
@@ -267,13 +271,17 @@ async def delete_project(project_id: str):
 
 
 @router.get("/{project_id}", response_model=ContentProjectResponse)
-async def get_project(project_id: str):
+async def get_project(
+    project_id: str,
+    user: dict = Depends(get_current_user),
+):
     """Retorna um projeto de conteúdo com todos os seus slides."""
+    user_id = user["sub"]
     result = (
         get_table(TABLE_PROJECTS)
         .select("*")
         .eq("id", project_id)
-        .eq("user_id", USER_ID)
+        .eq("user_id", user_id)
         .limit(1)
         .execute()
     )
@@ -287,12 +295,17 @@ async def get_project(project_id: str):
 
 
 @router.get("", response_model=List[ContentProjectResponse])
-async def list_projects(limit: int = 20, offset: int = 0):
+async def list_projects(
+    limit: int = 20,
+    offset: int = 0,
+    user: dict = Depends(get_current_user),
+):
     """Lista os projetos de conteúdo do usuário (mais recentes primeiro)."""
+    user_id = user["sub"]
     result = (
         get_table(TABLE_PROJECTS)
         .select("*")
-        .eq("user_id", USER_ID)
+        .eq("user_id", user_id)
         .order("created_at", desc=True)
         .range(offset, offset + limit - 1)
         .execute()
@@ -302,7 +315,6 @@ async def list_projects(limit: int = 20, offset: int = 0):
     if not projects:
         return []
 
-    # Busca todos os slides de uma vez (evita N+1 queries)
     project_ids = [p["id"] for p in projects]
     slides_result = (
         get_table(TABLE_SLIDES)
@@ -313,7 +325,6 @@ async def list_projects(limit: int = 20, offset: int = 0):
     )
     all_slides = slides_result.data or []
 
-    # Agrupa slides por project_id em memória
     slides_by_project: dict[str, list[dict]] = {}
     for slide in all_slides:
         pid = slide["project_id"]
@@ -332,7 +343,10 @@ MAX_VIDEO_SIZE = 100 * 1024 * 1024   # 100 MB
 
 
 @router.post("/upload-image")
-async def upload_content_image(file: UploadFile = File(...)):
+async def upload_content_image(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
     """
     Faz upload de uma imagem para o bucket content-media no Supabase Storage.
     Retorna a URL pública do arquivo.
@@ -366,7 +380,10 @@ async def upload_content_image(file: UploadFile = File(...)):
 
 
 @router.post("/upload-video")
-async def upload_content_video(file: UploadFile = File(...)):
+async def upload_content_video(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
     """
     Faz upload de um vídeo para o bucket content-media no Supabase Storage.
     Aceita MP4 e MOV. Máximo 100 MB.
@@ -401,25 +418,29 @@ async def upload_content_video(file: UploadFile = File(...)):
 
 
 @router.post("/{project_id}/slides/{slide_id}/generate-image")
-async def generate_slide_image(project_id: str, slide_id: str):
+async def generate_slide_image(
+    project_id: str,
+    slide_id: str,
+    user: dict = Depends(get_current_user),
+):
     """
     Gera uma imagem via DALL-E 3 usando o visual_prompt do slide.
     Persiste no Supabase Storage e atualiza media_url do slide.
     Retorna a URL pública da imagem gerada.
     """
-    # Verifica que o projeto pertence ao usuário
+    user_id = user["sub"]
+
     proj_result = (
         get_table(TABLE_PROJECTS)
         .select("id")
         .eq("id", project_id)
-        .eq("user_id", USER_ID)
+        .eq("user_id", user_id)
         .limit(1)
         .execute()
     )
     if not proj_result.data:
         raise HTTPException(status_code=404, detail="Projeto não encontrado.")
 
-    # Busca o slide
     slide_result = (
         get_table(TABLE_SLIDES)
         .select("id, visual_prompt")
@@ -439,14 +460,12 @@ async def generate_slide_image(project_id: str, slide_id: str):
             detail="Este slide não possui um prompt visual. Edite o slide e adicione um antes de gerar a imagem.",
         )
 
-    # Gera a imagem via DALL-E 3
     try:
         image_url = await image_service.generate_and_store(visual_prompt)
     except RuntimeError as exc:
         logger.error("Falha na geração de imagem para slide %s: %s", slide_id, exc)
         raise HTTPException(status_code=502, detail=str(exc))
 
-    # Atualiza media_url do slide no banco
     try:
         get_table(TABLE_SLIDES).update({"media_url": image_url}).eq("id", slide_id).execute()
     except Exception as exc:

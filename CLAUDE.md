@@ -35,8 +35,8 @@ Aplicação fullstack single-user que permite a criadores de conteúdo gerar e p
 - Preview e edição antes da publicação
 - Publicação direta no Instagram (feed e Reels) com um clique
 
-### Fora do MVP
-Multi-contas, gestão de clientes, agendamento, analytics, biblioteca de templates, aprovação colaborativa.
+### Fora do MVP (v1)
+~~Multi-contas~~ → planejado na Fase 6, gestão de clientes, agendamento, analytics, biblioteca de templates, aprovação colaborativa.
 
 ---
 
@@ -140,7 +140,8 @@ POST /content/{id}/slides/{slide_id}/generate-image # gera imagem via DALL-E 3 �
 ### Implementados — Fase 4 (Publicação) ✅
 
 ```
-POST /instagram/publish/{project_id}   # publica post único, carrossel ou reel via INSTAGRAM_ACCESS_TOKEN do .env
+POST /instagram/publish/{project_id}    # publica post único, carrossel ou reel via INSTAGRAM_ACCESS_TOKEN do .env
+POST /instagram/unpublish/{project_id}  # arquiva projeto localmente (status → archived); deleção no Instagram é manual
 ```
 
 > Publicação usa token direto do `.env` (sem OAuth).
@@ -158,7 +159,7 @@ Nomes reais das tabelas — use estes nomes em todo código novo. A tabela `user
 | `instagram_connections` | ✅ existe | user_id, instagram_handle, instagram_user_id, access_token_encrypted, token_expires_at, status |
 | `brand_kits` | ✅ existe (Fase 2) | user_id, primary_color (varchar HEX), secondary_colors (jsonb), logo_url, tone_of_voice, visual_style, typography_suggestion, layout_patterns (jsonb), source (manual\|ai_extracted) |
 | `brand_assets` | ✅ existe (Fase 2) | user_id, brand_kit_id (fk), file_name, file_type, storage_path, storage_url, extracted_metadata (jsonb) |
-| `content_projects` | ✅ existe (Fase 3) | user_id, type (single_post\|carousel\|reel), theme, slides_count, status (draft\|approved\|publishing\|published\|failed), caption, hashtags (jsonb), instagram_post_url, error_message |
+| `content_projects` | ✅ existe (Fase 3) | user_id, type (single_post\|carousel\|reel), theme, slides_count, status (draft\|approved\|publishing\|published\|failed\|archived), caption, hashtags (jsonb), instagram_post_url, error_message |
 | `content_slides` | ✅ existe (Fase 3) | content_id (fk → content_projects), slide_order, title, body, visual_prompt, media_url |
 
 > Os schemas DDL completos (CREATE TABLE com índices) estão na **seção 7 do SDD.md**.
@@ -196,6 +197,8 @@ pip freeze > requirements.txt
 ## Detalhes de implementação importantes
 
 - **MVP single-user**: o backend usa `MVP_USER_ID` fixo (env var) em vez de autenticação de sessão — toda operação é feita para esse único usuário.
+- **Limitação arquitetural (alvo da Fase 6)**: o frontend acessa o Supabase diretamente via `supabaseClient.ts` em alguns pontos, bypassando o FastAPI. Em produção multi-usuário, todo acesso a dados deve passar pelo backend (onde o JWT é validado). O RLS do Supabase também não está ativado no MVP — depende do `MVP_USER_ID` como isolamento.
+- **Limitação de contas Instagram**: o MVP suporta apenas um perfil Instagram via token fixo no `.env`. A Fase 6 implementa OAuth por usuário com N contas por `user_id`.
 - **Tabela real de conexões**: `instagram_connections` (o PRD menciona `instagram_accounts` — nome desatualizado, ignorar).
 - **Tabela real de conteúdo**: `content_projects` (o PRD menciona `generated_contents` — nome desatualizado, ignorar).
 - **Endpoints connect/callback são GET** — o OAuth da Meta exige redirect GET.
@@ -304,6 +307,18 @@ ALLOWED_ORIGINS=               # ex: https://creatorai.vercel.app,https://www.se
 | `PRD_Gerador_Conteudo_Instagram_IA_MVP.md` | Requisitos completos do produto e user stories |
 | `design_Gerador_Conteudo_Instagram_IA_MVP.md` | Referências de design |
 
+### Diagramas de arquitetura (Archify)
+
+| Arquivo HTML | Tipo | Conteúdo |
+|---|---|---|
+| `creatorai-architecture.html` | Arquitetura | Visão geral do sistema MVP atual |
+| `creatorai-multiuser-architecture.html` | Arquitetura | Evolução para multi-usuário (Fase 6) |
+| `creatorai-auth-sequence.html` | Sequence | Fluxo de autenticação com Supabase Auth + JWT |
+| `creatorai-publish-sequence.html` | Sequence | Fluxo completo de publicação no Instagram |
+| `creatorai-project-lifecycle.html` | Lifecycle | Estados do projeto: draft → published → archived |
+
+> Todos os diagramas são HTML standalone — abrir no browser, sem dependências.
+
 ---
 
 ## Status das Fases
@@ -315,6 +330,7 @@ ALLOWED_ORIGINS=               # ex: https://creatorai.vercel.app,https://www.se
 | Fase 3 — Geração de Conteúdo | Tabelas `content_projects`/`content_slides`, endpoints `/content/*`, pipeline OpenAI | ✅ Concluída (backend + frontend) |
 | Fase 4 — Publicação | `POST /instagram/publish/{id}`, token direto do `.env`, botão no frontend | ✅ Concluída |
 | Fase 5 — Qualidade + Reels + Imagens | Correções de performance (async, N+1, singleton), suporte a Reel, DALL-E 3 por slide | ✅ Concluída |
+| Fase 6 — Multi-usuário | Supabase Auth, JWT Middleware, RLS, N contas Instagram por usuário | 🔜 Planejado |
 
 ---
 
@@ -418,3 +434,76 @@ ALLOWED_ORIGINS=               # ex: https://creatorai.vercel.app,https://www.se
 - [x] `services/image_service.py`: chama DALL-E 3, baixa URL temporária, persiste em `content-media/generated/`
 - [x] `POST /content/{id}/slides/{slide_id}/generate-image`: gera imagem e atualiza `media_url` do slide
 - [x] Frontend: botão "✨ Gerar imagem com IA" por slide no `ContentPreview`; exibe imagem gerada inline
+
+---
+
+## Fase 6 — Multi-usuário (planejado)
+
+Evolução arquitetural para suportar N usuários, cada um com N contas Instagram conectadas. Não é reescrita — o schema já tem `user_id` em todas as tabelas; é ativação do que existe.
+
+### Diagrama de referência
+`creatorai-multiuser-architecture.html` — mostra a arquitetura alvo completa.
+
+### O que muda
+
+#### 1. Autenticação — Supabase Auth
+- Ativar Supabase Auth (já está no stack — `@supabase/supabase-js` instalado)
+- Criar páginas `/login` e `/signup` no Next.js
+- Login via email/senha ou OAuth social (Google etc.)
+- Supabase Auth emite JWT assinado com `SUPABASE_JWT_SECRET`
+
+#### 2. Backend — JWT Middleware
+- Remover `MVP_USER_ID` de `core/config.py`
+- Adicionar `get_current_user` dependency (valida JWT via `SUPABASE_JWT_SECRET` localmente — sem chamada de rede)
+- Injetar `user.id` em todas as rotas como `Depends(get_current_user)`
+- Adicionar `SUPABASE_JWT_SECRET` às env vars obrigatórias no startup
+
+```python
+# padrão de todas as rotas após migração
+@router.get("/content")
+async def list_content(user = Depends(get_current_user)):
+    user_id = user.id  # dinâmico, extraído do JWT
+```
+
+#### 3. Banco — Row-Level Security (RLS)
+- Ativar RLS em todas as tabelas: `instagram_connections`, `brand_kits`, `brand_assets`, `content_projects`, `content_slides`
+- Criar políticas `FOR ALL USING (auth.uid() = user_id)` em cada tabela
+- Com RLS ativo, queries vazam zero dados entre usuários mesmo que haja bug no código
+
+```sql
+-- exemplo para content_projects
+ALTER TABLE content_projects ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "users see own projects"
+  ON content_projects FOR ALL
+  USING (auth.uid() = user_id);
+```
+
+#### 4. Frontend — Eliminar acesso direto ao Supabase
+- Todo acesso a dados passa pelo FastAPI (não mais via `supabaseClient.ts` direto)
+- `supabaseClient.ts` passa a ser usado **apenas** para `supabase.auth.*` (login, logout, sessão)
+- Next.js lê o JWT da sessão do Supabase Auth e envia como `Authorization: Bearer <jwt>` em cada request ao backend
+
+#### 5. Instagram OAuth — N contas por usuário
+- O token OAuth passa a ser associado ao `user_id` autenticado (não ao MVP_USER_ID fixo)
+- `GET /auth/instagram/connect` → gera URL OAuth parametrizada com o `user_id` da sessão
+- `GET /auth/instagram/callback` → salva token criptografado associado ao `user_id` real
+- Um usuário pode conectar múltiplos perfis Instagram — cada um com sua linha em `instagram_connections`
+
+### Novas env vars necessárias
+```
+SUPABASE_JWT_SECRET=   # em Project Settings → API → JWT Secret (Supabase dashboard)
+```
+
+### Ordem de implementação sugerida
+1. Supabase Auth + páginas de login/signup
+2. JWT Middleware no FastAPI + remover MVP_USER_ID
+3. Ativar RLS em todas as tabelas
+4. Refatorar frontend para parar de acessar Supabase diretamente
+5. Migrar OAuth Instagram para ser por usuário
+
+### O que NÃO muda
+- Schema do banco (todas as tabelas já têm `user_id`)
+- Service Layer (`ai_service`, `publishing_service`, `meta_service` etc.)
+- Estrutura de rotas do FastAPI
+- Deploy no Vercel + Render
+- Nenhuma tabela precisa ser recriada

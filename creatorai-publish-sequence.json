@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "CreatorAI — Fluxo de Publicação no Instagram",
+    "subtitle": "Validação JWT · Container de mídia · Meta Graph API v19",
+    "output": "creatorai-publish-sequence.html",
+    "viewBox": [920, 860]
+  },
+  "participants": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Browser",
+      "sublabel": "Usuário"
+    },
+    {
+      "id": "nextjs",
+      "type": "frontend",
+      "label": "Next.js",
+      "sublabel": "ContentPreview"
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "FastAPI",
+      "sublabel": "publishing_service"
+    },
+    {
+      "id": "supabase_db",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "RLS ativo"
+    },
+    {
+      "id": "meta_api",
+      "type": "external",
+      "label": "Meta API",
+      "sublabel": "Graph API v19.0"
+    }
+  ],
+  "segments": [
+    { "from": 155, "to": 345, "label": "01 / VALIDAÇÃO" },
+    { "from": 360, "to": 545, "label": "02 / CONTAINER DE MÍDIA" },
+    { "from": 560, "to": 778, "label": "03 / PUBLICAÇÃO" }
+  ],
+  "messages": [
+    {
+      "id": "click-publish",
+      "from": "browser",
+      "to": "nextjs",
+      "y": 185,
+      "label": "Clica em Publicar",
+      "variant": "emphasis"
+    },
+    {
+      "id": "post-publish",
+      "from": "nextjs",
+      "to": "backend",
+      "y": 230,
+      "label": "POST /instagram/publish/{id}",
+      "variant": "emphasis",
+      "note": "Authorization: Bearer JWT · projeto aprovado pelo usuário"
+    },
+    {
+      "id": "fetch-token",
+      "from": "backend",
+      "to": "supabase_db",
+      "y": 278,
+      "label": "Busca token OAuth do usuário",
+      "variant": "security"
+    },
+    {
+      "id": "token-returned",
+      "from": "supabase_db",
+      "to": "backend",
+      "y": 322,
+      "label": "access_token (Fernet)",
+      "variant": "return",
+      "note": "Token descriptografado internamente · nunca exposto ao frontend"
+    },
+    {
+      "id": "create-container",
+      "from": "backend",
+      "to": "meta_api",
+      "y": 385,
+      "label": "POST /media · conteúdo do projeto",
+      "variant": "emphasis",
+      "note": "Tipo: single_post · carousel · ou reel · caption + hashtags no body"
+    },
+    {
+      "id": "creation-id",
+      "from": "meta_api",
+      "to": "backend",
+      "y": 435,
+      "label": "{ creation_id }",
+      "variant": "return"
+    },
+    {
+      "id": "poll-status",
+      "from": "backend",
+      "to": "meta_api",
+      "y": 478,
+      "label": "GET /{creation_id} · polling",
+      "variant": "dashed",
+      "note": "Aguarda status = FINISHED · async via httpx · intervalo ~2s"
+    },
+    {
+      "id": "status-finished",
+      "from": "meta_api",
+      "to": "backend",
+      "y": 525,
+      "label": "{ status_code: FINISHED }",
+      "variant": "return"
+    },
+    {
+      "id": "publish-media",
+      "from": "backend",
+      "to": "meta_api",
+      "y": 580,
+      "label": "POST /{ig_user_id}/media_publish",
+      "variant": "emphasis"
+    },
+    {
+      "id": "media-id",
+      "from": "meta_api",
+      "to": "backend",
+      "y": 628,
+      "label": "{ id: instagram_media_id }",
+      "variant": "return"
+    },
+    {
+      "id": "update-db",
+      "from": "backend",
+      "to": "supabase_db",
+      "y": 673,
+      "label": "UPDATE status='published' + media_id",
+      "variant": "security"
+    },
+    {
+      "id": "api-response",
+      "from": "backend",
+      "to": "nextjs",
+      "y": 718,
+      "label": "200 { instagram_post_url }",
+      "variant": "return"
+    },
+    {
+      "id": "show-success",
+      "from": "nextjs",
+      "to": "browser",
+      "y": 763,
+      "label": "Publicado com sucesso!",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    { "participant": "backend",     "from": 230, "to": 728, "type": "backend"  },
+    { "participant": "supabase_db", "from": 278, "to": 330, "type": "database" },
+    { "participant": "meta_api",    "from": 385, "to": 534, "type": "frontend" },
+    { "participant": "supabase_db", "from": 673, "to": 703, "type": "database" }
+  ],
+  "cards": []
+}

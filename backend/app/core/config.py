@@ -23,8 +23,8 @@ INSTAGRAM_BUSINESS_ID: str = os.getenv("INSTAGRAM_BUSINESS_ID", "")
 # Criptografia de tokens
 TOKEN_ENCRYPTION_KEY: str = os.getenv("TOKEN_ENCRYPTION_KEY", "")
 
-# MVP: ID fixo do único usuário (single-user)
-MVP_USER_ID: str = os.getenv("MVP_USER_ID", "00000000-0000-0000-0000-000000000001")
+# Autenticação JWT (Supabase Auth — Fase 6)
+SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET", "")
 
 # OpenAI — provedor de IA do projeto
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")

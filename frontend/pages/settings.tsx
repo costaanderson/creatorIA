@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ApiError, BrandKit, getBrandKit } from '../lib/api';
+import { useUser } from '../lib/useUser';
 import BrandKitForm from '../components/BrandKitForm';
 import InstagramConnectionCard from '../components/InstagramConnectionCard';
 import styles from '../styles/settings.module.css';
@@ -11,6 +12,7 @@ type PageState =
   | { status: 'ready'; brandKit: BrandKit | null };
 
 export default function SettingsPage() {
+  const session = useUser();
   const [state, setState] = useState<PageState>({ status: 'loading' });
 
   const loadBrandKit = useCallback(async () => {
@@ -27,13 +29,15 @@ export default function SettingsPage() {
     }
   }, []);
 
-  useEffect(() => { loadBrandKit(); }, [loadBrandKit]);
+  useEffect(() => { if (session) loadBrandKit(); }, [loadBrandKit, session]);
 
   const handleBrandKitSaved = (kit: BrandKit) => {
     setState({ status: 'ready', brandKit: kit });
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  if (!session) return null;
 
   return (
     <div className={styles.page}>

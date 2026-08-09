@@ -8,3 +8,4 @@ cryptography
 openai>=1.0
 python-magic>=0.4.27
 python-multipart
+PyJWT>=2.8.0

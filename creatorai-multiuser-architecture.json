@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "CreatorAI — Arquitetura Multi-Usuário",
+    "subtitle": "Evolução para múltiplos usuários e N contas Instagram por usuário",
+    "output": "creatorai-multiuser-architecture.html",
+    "viewBox": [960, 690],
+    "views": [
+      {
+        "id": "auth-flow",
+        "label": "Fluxo de autenticação",
+        "focus": ["user", "nextjs", "supabase_auth", "backend"],
+        "note": "Usuário faz login → Supabase Auth emite JWT → frontend envia Bearer token → FastAPI valida e extrai user_id."
+      },
+      {
+        "id": "content-creation",
+        "label": "Geração de conteúdo",
+        "focus": ["user", "nextjs", "backend", "openai", "supabase_db"],
+        "note": "Request autenticado → backend usa user_id do JWT → salva projeto isolado por RLS."
+      },
+      {
+        "id": "multi-account",
+        "label": "Multi-conta Instagram",
+        "focus": ["nextjs", "backend", "meta_api", "supabase_db"],
+        "note": "Cada user_id pode ter N conexões OAuth com contas Instagram distintas."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "Usuário",
+      "sublabel": "Browser",
+      "pos": [30, 250],
+      "size": [100, 60]
+    },
+    {
+      "id": "nextjs",
+      "type": "frontend",
+      "label": "Next.js 15",
+      "sublabel": "Auth + App Pages",
+      "pos": [195, 230],
+      "size": [140, 60],
+      "tag": "Vercel"
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "FastAPI",
+      "sublabel": "Python · JWT Middleware",
+      "pos": [430, 230],
+      "size": [145, 60],
+      "tag": "Render"
+    },
+    {
+      "id": "openai",
+      "type": "cloud",
+      "label": "OpenAI API",
+      "sublabel": "gpt-4o · DALL-E 3",
+      "pos": [660, 120],
+      "size": [130, 60],
+      "tag": "AI"
+    },
+    {
+      "id": "meta_api",
+      "type": "external",
+      "label": "Meta Graph API",
+      "sublabel": "N contas por usuário",
+      "pos": [660, 310],
+      "size": [135, 60]
+    },
+    {
+      "id": "supabase_auth",
+      "type": "security",
+      "label": "Supabase Auth",
+      "sublabel": "Email · OAuth · JWT",
+      "pos": [170, 450],
+      "size": [140, 60]
+    },
+    {
+      "id": "supabase_db",
+      "type": "database",
+      "label": "Supabase PostgreSQL",
+      "sublabel": "RLS ativo · user_id isolado",
+      "pos": [355, 450],
+      "size": [160, 60]
+    },
+    {
+      "id": "supabase_storage",
+      "type": "cloud",
+      "label": "Supabase Storage",
+      "sublabel": "brand-assets · content-media",
+      "pos": [550, 450],
+      "size": [155, 60]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Vercel",
+      "wraps": ["nextjs"]
+    },
+    {
+      "kind": "region",
+      "label": "Render",
+      "wraps": ["backend"]
+    },
+    {
+      "kind": "security-group",
+      "label": "Supabase Cloud",
+      "wraps": ["supabase_auth", "supabase_db", "supabase_storage"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "user-to-nextjs",
+      "from": "user",
+      "to": "nextjs",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "nextjs-to-backend",
+      "from": "nextjs",
+      "to": "backend",
+      "label": "REST API · Bearer JWT",
+      "labelAt": [383, 220],
+      "variant": "emphasis"
+    },
+    {
+      "id": "nextjs-to-auth",
+      "from": "nextjs",
+      "to": "supabase_auth",
+      "label": "Login · OAuth",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "backend-to-openai",
+      "from": "backend",
+      "to": "openai",
+      "label": "gpt-4o / DALL-E 3",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "backend-to-meta",
+      "from": "backend",
+      "to": "meta_api",
+      "label": "Graph API v19",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "backend-to-db",
+      "from": "backend",
+      "to": "supabase_db",
+      "label": "SQL · RLS",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "backend-to-storage",
+      "from": "backend",
+      "to": "supabase_storage",
+      "label": "Storage API",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [[545, 385], [627, 385]]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "Mudanças vs. versão MVP",
+      "items": [
+        "Remove MVP_USER_ID fixo do .env",
+        "JWT por request → user_id dinâmico",
+        "RLS ativado em todas as tabelas",
+        "Frontend usa só Auth (sem query direto ao banco)"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Multi-conta Instagram",
+      "items": [
+        "N usuários cadastrados via Supabase Auth",
+        "Cada user_id → N conexões OAuth Instagram",
+        "Brand Kits e projetos isolados por user_id",
+        "RLS garante isolamento no banco"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Auth Flow (novo)",
+      "items": [
+        "Login → Supabase Auth emite JWT",
+        "Frontend armazena sessão (cookie/localStorage)",
+        "FastAPI valida JWT via SUPABASE_JWT_SECRET",
+        "user_id extraído do token a cada request"
+      ]
+    }
+  ]
+}

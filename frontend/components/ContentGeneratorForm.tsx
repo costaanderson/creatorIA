@@ -253,14 +253,18 @@ export default function ContentGeneratorForm({ onGenerate, loading }: Props) {
       {/* Informações de requisitos para Reel */}
       {type === 'reel' && (
         <div className={styles.reelInfo}>
-          <p className={styles.reelInfoTitle}>Requisitos de vídeo para Reel</p>
+          <p className={styles.reelInfoTitle}>Como funciona o Reel</p>
+          <p className={styles.reelInfoNote}>
+            A IA vai gerar um <strong>roteiro completo</strong> com hook, desenvolvimento e CTA — incluindo o script de cada cena e direção de câmera.
+            Você grava o vídeo usando esse roteiro e faz o upload na tela de revisão para publicar.
+          </p>
+          <p className={styles.reelInfoTitle} style={{ marginTop: '0.75rem' }}>Requisitos do vídeo</p>
           <ul className={styles.reelInfoList}>
             <li>Resolução: <strong>1080×1920px</strong> (proporção 9:16 — vertical)</li>
             <li>Formato: <strong>MP4 ou MOV</strong></li>
             <li>Duração máxima: <strong>90 segundos</strong></li>
             <li>Tamanho máximo: <strong>100 MB</strong></li>
           </ul>
-          <p className={styles.reelInfoNote}>O upload do vídeo é feito na tela de revisão, após a IA gerar o roteiro.</p>
         </div>
       )}
 

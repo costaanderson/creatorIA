@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, ContentProjectResponse, deleteContent, listContent, unpublishContent, updateContent } from '../lib/api';
+import { useUser } from '../lib/useUser';
 import ErrorMessage from '../components/ErrorMessage';
 
 type ListState =
@@ -35,6 +36,7 @@ function formatDate(iso: string): string {
 }
 
 export default function Home() {
+  const session = useUser();
   const [listState, setListState] = useState<ListState>({ status: 'loading' });
   const [tab, setTab] = useState<Tab>('active');
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -54,7 +56,7 @@ export default function Home() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (session) load(); }, [load, session]);
 
   const handleArchive = async (e: React.MouseEvent, projectId: string) => {
     e.preventDefault();
@@ -121,6 +123,8 @@ export default function Home() {
 
   const activeProjects = listState.status === 'ready' ? listState.projects.filter((p) => p.status !== 'archived') : [];
   const archivedProjects = listState.status === 'ready' ? listState.projects.filter((p) => p.status === 'archived') : [];
+
+  if (!session) return null;
 
   // Styles
   const tabBase: React.CSSProperties = {

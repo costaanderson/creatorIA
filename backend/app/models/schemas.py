@@ -137,6 +137,7 @@ class SlideUpdateItem(BaseModel):
 
 
 class ContentUpdateRequest(BaseModel):
+    theme: Optional[str] = Field(None, min_length=5, max_length=500)
     caption: Optional[str] = Field(None, max_length=2200)
     hashtags: Optional[List[str]] = None
     slides: Optional[List[SlideUpdateItem]] = None

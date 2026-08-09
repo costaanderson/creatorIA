@@ -11,11 +11,11 @@ import logging
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 
-from app.core import config
+from app.core.auth import get_current_user
 from app.services import publishing_service
 from app.services.supabase_service import get_table
 
@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/instagram", tags=["Publish"])
 
-USER_ID = config.MVP_USER_ID
 TABLE_PROJECTS = "content_projects"
 TABLE_SLIDES = "content_slides"
 
@@ -47,12 +46,12 @@ class PublishResponse(BaseModel):
     message: str
 
 
-def _get_project(project_id: str) -> dict:
+def _get_project(project_id: str, user_id: str) -> dict:
     result = (
         get_table(TABLE_PROJECTS)
         .select("*")
         .eq("id", project_id)
-        .eq("user_id", USER_ID)
+        .eq("user_id", user_id)
         .limit(1)
         .execute()
     )
@@ -78,7 +77,11 @@ def _update_project(project_id: str, data: dict) -> None:
 
 
 @router.post("/publish/{project_id}", response_model=PublishResponse)
-async def publish_project(project_id: str, body: PublishRequest = PublishRequest()):
+async def publish_project(
+    project_id: str,
+    body: PublishRequest = PublishRequest(),
+    user: dict = Depends(get_current_user),
+):
     """
     Publica um projeto de conteúdo no Instagram.
 
@@ -86,7 +89,8 @@ async def publish_project(project_id: str, body: PublishRequest = PublishRequest
     - Para carrossel: espera N image_urls no body (ou media_url em cada slide).
     - Atualiza o status do projeto para 'published' ou 'failed' no Supabase.
     """
-    project = _get_project(project_id)
+    user_id = user["sub"]
+    project = _get_project(project_id, user_id)
 
     if project["status"] == "published":
         raise HTTPException(
@@ -99,11 +103,9 @@ async def publish_project(project_id: str, body: PublishRequest = PublishRequest
     caption = project.get("caption") or ""
     hashtags = project.get("hashtags") or []
 
-    # Validações por tipo
     if content_type == "reel":
         video_url = body.video_url
         if not video_url:
-            # Tenta pegar do primeiro slide (media_url pode ter sido gerada)
             video_url = next((s["media_url"] for s in slides if s.get("media_url")), None)
         if not video_url:
             raise HTTPException(
@@ -121,7 +123,6 @@ async def publish_project(project_id: str, body: PublishRequest = PublishRequest
                 ),
             )
 
-    # Marca como publicando
     _update_project(project_id, {"status": "publishing"})
 
     try:
@@ -155,7 +156,6 @@ async def publish_project(project_id: str, body: PublishRequest = PublishRequest
             detail=f"Falha ao publicar no Instagram: {exc}",
         )
 
-    # Sucesso — persiste media_id e post_url
     media_id = result.get("media_id")
     post_url = result.get("post_url")
 
@@ -177,13 +177,17 @@ async def publish_project(project_id: str, body: PublishRequest = PublishRequest
 
 
 @router.post("/unpublish/{project_id}", response_model=PublishResponse)
-async def unpublish_project(project_id: str):
+async def unpublish_project(
+    project_id: str,
+    user: dict = Depends(get_current_user),
+):
     """
-    Arquiva o projeto localmente: reseta status para 'draft' e limpa os campos do Instagram.
+    Arquiva o projeto localmente: reseta status para 'archived' e limpa os campos do Instagram.
     Nota: a Meta API não permite deletar posts publicados via API para contas Business.
     O post no Instagram deve ser removido manualmente pelo usuário.
     """
-    project = _get_project(project_id)
+    user_id = user["sub"]
+    project = _get_project(project_id, user_id)
 
     if project["status"] != "published":
         raise HTTPException(

@@ -1,3 +1,5 @@
+import { supabase } from './supabaseClient';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -53,12 +55,21 @@ export class ApiError extends Error {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new ApiError(401, 'Sessão expirada. Faça login novamente.');
+  return { Authorization: `Bearer ${token}` };
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
 
+  const authHeaders = await getAuthHeaders();
+
   try {
     response = await fetch(`${API_BASE}${path}`, {
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      headers: { 'Content-Type': 'application/json', ...authHeaders, ...init?.headers },
       ...init,
     });
   } catch {
@@ -113,10 +124,12 @@ export async function uploadIdentityFile(file: File): Promise<BrandKitExtraction
   const formData = new FormData();
   formData.append('file', file);
 
+  const authHeaders = await getAuthHeaders();
   let response: Response;
   try {
     response = await fetch(`${API_BASE}/brand-kit/upload`, {
       method: 'POST',
+      headers: authHeaders,
       body: formData,
       // Não definir Content-Type: o browser adiciona boundary do multipart automaticamente
     });
@@ -199,6 +212,7 @@ export async function listContent(): Promise<ContentProjectResponse[]> {
 }
 
 export interface ContentUpdateRequest {
+  theme?: string;
   caption?: string;
   hashtags?: string[];
   slides?: Array<{ id: string; title?: string; body?: string; visual_prompt?: string; media_url?: string }>;
@@ -265,10 +279,12 @@ export async function uploadContentVideo(file: File): Promise<{ url: string }> {
   const formData = new FormData();
   formData.append('file', file);
 
+  const authHeaders = await getAuthHeaders();
   let response: Response;
   try {
     response = await fetch(`${API_BASE}/content/upload-video`, {
       method: 'POST',
+      headers: authHeaders,
       body: formData,
     });
   } catch {

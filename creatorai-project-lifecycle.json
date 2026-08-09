@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "CreatorAI — Lifecycle do Projeto de Conteúdo",
+    "subtitle": "Estados e transições de draft até publicado no Instagram",
+    "output": "creatorai-project-lifecycle.html"
+  },
+  "lanes": [
+    { "id": "main",     "label": "Ciclo principal" },
+    { "id": "errors",   "label": "Erros e retry" },
+    { "id": "terminal", "label": "Estados finais" }
+  ],
+  "states": [
+    {
+      "id": "draft",
+      "type": "start",
+      "label": "Draft",
+      "sublabel": "Gerado pela IA",
+      "lane": "main",
+      "col": 0,
+      "step": "01",
+      "tag": "status inicial"
+    },
+    {
+      "id": "approved",
+      "type": "active",
+      "label": "Approved",
+      "sublabel": "Pronto para publicar",
+      "lane": "main",
+      "col": 2,
+      "step": "02"
+    },
+    {
+      "id": "publishing",
+      "type": "active",
+      "label": "Publishing",
+      "sublabel": "Async · Meta Graph API",
+      "lane": "main",
+      "col": 4,
+      "step": "03",
+      "tag": "assíncrono"
+    },
+    {
+      "id": "failed",
+      "type": "failure",
+      "label": "Failed",
+      "sublabel": "Erro ou timeout",
+      "lane": "errors",
+      "col": 1
+    },
+    {
+      "id": "published",
+      "type": "success",
+      "label": "Published",
+      "sublabel": "No Instagram",
+      "lane": "terminal",
+      "col": 2
+    },
+    {
+      "id": "archived",
+      "type": "waiting",
+      "label": "Archived",
+      "sublabel": "Fora do feed ativo",
+      "lane": "terminal",
+      "col": 0
+    }
+  ],
+  "transitions": [
+    {
+      "id": "draft-to-approved",
+      "from": "draft",
+      "to": "approved",
+      "label": "usuário aprova",
+      "variant": "emphasis"
+    },
+    {
+      "id": "approved-to-publishing",
+      "from": "approved",
+      "to": "publishing",
+      "label": "clica em Publicar",
+      "variant": "emphasis"
+    },
+    {
+      "id": "publishing-to-published",
+      "from": "publishing",
+      "to": "published",
+      "label": "media_publish OK",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "publishing-to-failed",
+      "from": "publishing",
+      "to": "failed",
+      "label": "erro / timeout",
+      "labelDx": -55,
+      "fromSide": "bottom",
+      "toSide": "right"
+    },
+    {
+      "id": "failed-to-approved",
+      "from": "failed",
+      "to": "approved",
+      "label": "retry",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "published-to-archived",
+      "from": "published",
+      "to": "archived",
+      "label": "desativar",
+      "variant": "dashed"
+    },
+    {
+      "id": "draft-to-archived",
+      "from": "draft",
+      "to": "archived",
+      "label": "descartar",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "slate",
+      "title": "content_projects · campo status",
+      "items": [
+        "draft | approved | publishing",
+        "published | failed | archived",
+        "instagram_media_id → preenchido após publicação",
+        "error_message → preenchido em falha"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Transições automáticas (backend)",
+      "items": [
+        "publishing → published: meta_publish retorna media_id",
+        "publishing → failed: erro 4xx/5xx ou polling timeout",
+        "published → archived: POST /instagram/unpublish"
+      ]
+    }
+  ]
+}

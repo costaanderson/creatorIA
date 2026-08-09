@@ -31,6 +31,7 @@ type PublishState =
   | { status: 'error'; message: string };
 
 interface EditState {
+  theme: string;
   caption: string;
   hashtags: string; // one per line
   slides: Array<{ id: string; title: string; body: string; visual_prompt: string }>;
@@ -38,6 +39,7 @@ interface EditState {
 
 function initEditState(project: ContentProjectResponse): EditState {
   return {
+    theme: project.theme,
     caption: project.caption ?? '',
     hashtags: project.hashtags.map((h) => (h.startsWith('#') ? h : `#${h}`)).join('\n'),
     slides: project.slides.map((s) => ({
@@ -60,6 +62,7 @@ export default function ContentPreview({ project, onNewContent, onUpdated, prese
 
   // Geração de imagem por slide
   const [generatingImage, setGeneratingImage] = useState<Record<string, boolean>>({});
+  const [slideImageErrors, setSlideImageErrors] = useState<Record<string, string>>({});
   const [slideImages, setSlideImages] = useState<Record<string, string>>(() =>
     Object.fromEntries(project.slides.filter((s) => s.media_url).map((s) => [s.id, s.media_url!]))
   );
@@ -93,12 +96,13 @@ export default function ContentPreview({ project, onNewContent, onUpdated, prese
 
   const handleGenerateImage = async (slideId: string) => {
     setGeneratingImage((prev) => ({ ...prev, [slideId]: true }));
+    setSlideImageErrors((prev) => ({ ...prev, [slideId]: '' }));
     try {
       const result = await generateSlideImage(project.id, slideId);
       setSlideImages((prev) => ({ ...prev, [slideId]: result.url }));
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : 'Erro ao gerar imagem.';
-      alert(msg);
+      const msg = err instanceof ApiError ? err.message : 'Erro ao gerar imagem. Tente novamente.';
+      setSlideImageErrors((prev) => ({ ...prev, [slideId]: msg }));
     } finally {
       setGeneratingImage((prev) => ({ ...prev, [slideId]: false }));
     }
@@ -195,6 +199,7 @@ export default function ContentPreview({ project, onNewContent, onUpdated, prese
       .filter(Boolean);
 
     const payload: ContentUpdateRequest = {
+      theme: editState.theme,
       caption: editState.caption,
       hashtags: parsedHashtags,
       slides: editState.slides.map((s) => ({
@@ -297,25 +302,48 @@ export default function ContentPreview({ project, onNewContent, onUpdated, prese
                         alt={`Imagem gerada — ${slide.title}`}
                         style={{ width: '100%', borderRadius: '8px', display: 'block' }}
                       />
+                      <button
+                        style={{
+                          marginTop: '0.5rem',
+                          padding: '0.3rem 0.7rem',
+                          fontSize: '0.75rem',
+                          borderRadius: '6px',
+                          border: '1px solid #9ca3af',
+                          background: 'transparent',
+                          color: '#6b7280',
+                          cursor: generatingImage[slide.id] ? 'not-allowed' : 'pointer',
+                          opacity: generatingImage[slide.id] ? 0.6 : 1,
+                        }}
+                        onClick={() => handleGenerateImage(slide.id)}
+                        disabled={generatingImage[slide.id]}
+                      >
+                        {generatingImage[slide.id] ? '⏳ Regerando…' : '🔄 Gerar novamente'}
+                      </button>
                     </div>
                   ) : !isReel && (
-                    <button
-                      style={{
-                        marginTop: '0.75rem',
-                        padding: '0.4rem 0.9rem',
-                        fontSize: '0.8rem',
-                        borderRadius: '6px',
-                        border: '1px solid #6366F1',
-                        background: 'transparent',
-                        color: '#6366F1',
-                        cursor: generatingImage[slide.id] ? 'not-allowed' : 'pointer',
-                        opacity: generatingImage[slide.id] ? 0.6 : 1,
-                      }}
-                      onClick={() => handleGenerateImage(slide.id)}
-                      disabled={generatingImage[slide.id]}
-                    >
-                      {generatingImage[slide.id] ? '⏳ Gerando imagem…' : '✨ Gerar imagem com IA'}
-                    </button>
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <button
+                        style={{
+                          padding: '0.4rem 0.9rem',
+                          fontSize: '0.8rem',
+                          borderRadius: '6px',
+                          border: '1px solid #6366F1',
+                          background: 'transparent',
+                          color: '#6366F1',
+                          cursor: generatingImage[slide.id] ? 'not-allowed' : 'pointer',
+                          opacity: generatingImage[slide.id] ? 0.6 : 1,
+                        }}
+                        onClick={() => handleGenerateImage(slide.id)}
+                        disabled={generatingImage[slide.id]}
+                      >
+                        {generatingImage[slide.id] ? '⏳ Gerando imagem…' : '✨ Gerar imagem com IA'}
+                      </button>
+                      {slideImageErrors[slide.id] && (
+                        <p style={{ marginTop: '0.4rem', fontSize: '0.78rem', color: '#dc2626' }}>
+                          {slideImageErrors[slide.id]}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
@@ -487,6 +515,19 @@ export default function ContentPreview({ project, onNewContent, onUpdated, prese
       {/* ── EDIT TAB ────────────────────────────────────────────────────── */}
       {activeTab === 'edit' && (
         <div className={styles.editForm}>
+          {/* Tema */}
+          <div className={styles.editField}>
+            <label className={styles.editLabel}>Tema do conteúdo</label>
+            <textarea
+              className={styles.editTextarea}
+              rows={2}
+              value={editState.theme}
+              onChange={(e) => setEditState((prev) => ({ ...prev, theme: e.target.value }))}
+              maxLength={500}
+            />
+            <span className={styles.editHint}>{editState.theme.length}/500 chars · altere o tema e salve para atualizar o projeto.</span>
+          </div>
+
           {/* Slides */}
           {editState.slides.map((s, i) => (
             <div key={s.id} className={styles.slideEditCard}>

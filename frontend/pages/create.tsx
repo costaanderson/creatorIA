@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { ApiError, ContentGenerateRequest, ContentProjectResponse, generateContent, getContent, updateContent } from '../lib/api';
+import { useUser } from '../lib/useUser';
 import ContentGeneratorForm from '../components/ContentGeneratorForm';
 import ContentPreview from '../components/ContentPreview';
 import styles from '../styles/create.module.css';
@@ -14,12 +15,13 @@ type PageState =
   | { phase: 'error'; message: string };
 
 export default function CreatePage() {
+  const session = useUser();
   const router = useRouter();
   const [state, setState] = useState<PageState>({ phase: 'form' });
 
   // Adjust 3 — load existing project from query param ?id=
   useEffect(() => {
-    if (!router.isReady) return;
+    if (!router.isReady || !session) return;
     const id = router.query.id;
     if (typeof id !== 'string' || !id) return;
 
@@ -31,7 +33,7 @@ export default function CreatePage() {
           err instanceof ApiError ? err.message : 'Projeto não encontrado.';
         setState({ phase: 'error', message });
       });
-  }, [router.isReady, router.query.id]);
+  }, [router.isReady, router.query.id, session]);
 
   const handleGenerate = async (request: ContentGenerateRequest) => {
     const capturedImageUrls = request.image_urls ?? [];
@@ -75,6 +77,8 @@ export default function CreatePage() {
   };
 
   const isGenerating = state.phase === 'generating';
+
+  if (!session) return null;
 
   return (
     <div className={styles.page}>

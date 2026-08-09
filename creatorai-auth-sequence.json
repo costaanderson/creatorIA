@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "CreatorAI — Fluxo de Autenticação",
+    "subtitle": "Login com Supabase Auth · JWT · Request protegido no FastAPI",
+    "output": "creatorai-auth-sequence.html",
+    "viewBox": [920, 800]
+  },
+  "participants": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "Browser",
+      "sublabel": "Usuário"
+    },
+    {
+      "id": "nextjs",
+      "type": "frontend",
+      "label": "Next.js",
+      "sublabel": "Auth Pages"
+    },
+    {
+      "id": "supabase_auth",
+      "type": "security",
+      "label": "Supabase Auth",
+      "sublabel": "JWT issuer"
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "FastAPI",
+      "sublabel": "JWT Middleware"
+    },
+    {
+      "id": "supabase_db",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "RLS ativo"
+    }
+  ],
+  "segments": [
+    { "from": 155, "to": 385, "label": "01 / LOGIN" },
+    { "from": 400, "to": 715, "label": "02 / REQUEST PROTEGIDO" }
+  ],
+  "messages": [
+    {
+      "id": "login-submit",
+      "from": "browser",
+      "to": "nextjs",
+      "y": 190,
+      "label": "Envia email + senha",
+      "variant": "emphasis"
+    },
+    {
+      "id": "sign-in",
+      "from": "nextjs",
+      "to": "supabase_auth",
+      "y": 240,
+      "label": "signInWithEmail()",
+      "variant": "security"
+    },
+    {
+      "id": "jwt-issued",
+      "from": "supabase_auth",
+      "to": "nextjs",
+      "y": 305,
+      "label": "JWT + refresh_token",
+      "variant": "return",
+      "note": "Token assinado com SUPABASE_JWT_SECRET · contém user_id no payload"
+    },
+    {
+      "id": "session-saved",
+      "from": "nextjs",
+      "to": "browser",
+      "y": 360,
+      "label": "Sessão salva · redirect /create",
+      "variant": "return"
+    },
+    {
+      "id": "access-page",
+      "from": "browser",
+      "to": "nextjs",
+      "y": 430,
+      "label": "Acessa /create (página protegida)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "api-call",
+      "from": "nextjs",
+      "to": "backend",
+      "y": 480,
+      "label": "GET /content · Authorization: Bearer JWT",
+      "variant": "emphasis"
+    },
+    {
+      "id": "db-query",
+      "from": "backend",
+      "to": "supabase_db",
+      "y": 540,
+      "label": "SELECT * WHERE user_id = {JWT.sub}",
+      "variant": "security",
+      "note": "JWT validado localmente via SUPABASE_JWT_SECRET · RLS rejeita outros user_ids"
+    },
+    {
+      "id": "db-response",
+      "from": "supabase_db",
+      "to": "backend",
+      "y": 600,
+      "label": "Projetos do usuário",
+      "variant": "return"
+    },
+    {
+      "id": "api-response",
+      "from": "backend",
+      "to": "nextjs",
+      "y": 648,
+      "label": "200 { projetos }",
+      "variant": "return"
+    },
+    {
+      "id": "render",
+      "from": "nextjs",
+      "to": "browser",
+      "y": 695,
+      "label": "Renderiza dashboard",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    { "participant": "supabase_auth", "from": 240, "to": 310, "type": "security" },
+    { "participant": "backend",       "from": 480, "to": 658, "type": "backend"  },
+    { "participant": "supabase_db",   "from": 540, "to": 608, "type": "database" }
+  ],
+  "cards": []
+}

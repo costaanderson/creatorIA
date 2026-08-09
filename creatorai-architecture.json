@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "CreatorAI — Arquitetura do Sistema",
+    "subtitle": "Geração de conteúdo para Instagram com IA",
+    "output": "creatorai-architecture.html",
+    "viewBox": [920, 640],
+    "views": [
+      {
+        "id": "content-generation",
+        "label": "Geração de conteúdo",
+        "focus": ["user", "nextjs", "backend", "openai", "supabase_db"],
+        "note": "Usuário cria conteúdo com IA; resultado salvo no banco."
+      },
+      {
+        "id": "publishing",
+        "label": "Publicação no Instagram",
+        "focus": ["nextjs", "backend", "meta_api"],
+        "note": "Backend chama Meta Graph API para publicar post, carousel ou reel."
+      },
+      {
+        "id": "brand-kit",
+        "label": "Identidade visual",
+        "focus": ["user", "nextjs", "backend", "openai", "supabase_db", "supabase_storage"],
+        "note": "Upload de asset → Vision extrai cores e tom → salvo em storage e banco."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "Designer",
+      "sublabel": "Browser",
+      "pos": [30, 270],
+      "size": [100, 60]
+    },
+    {
+      "id": "nextjs",
+      "type": "frontend",
+      "label": "Next.js 15",
+      "sublabel": "Pages Router · TypeScript",
+      "pos": [200, 250],
+      "size": [130, 60],
+      "tag": "Vercel"
+    },
+    {
+      "id": "backend",
+      "type": "backend",
+      "label": "FastAPI",
+      "sublabel": "Python · REST API",
+      "pos": [400, 250],
+      "size": [120, 60],
+      "tag": "Render"
+    },
+    {
+      "id": "openai",
+      "type": "cloud",
+      "label": "OpenAI API",
+      "sublabel": "gpt-4o · DALL-E 3",
+      "pos": [640, 140],
+      "size": [130, 60],
+      "tag": "AI"
+    },
+    {
+      "id": "meta_api",
+      "type": "external",
+      "label": "Meta Graph API",
+      "sublabel": "Instagram v19.0",
+      "pos": [640, 360],
+      "size": [130, 60]
+    },
+    {
+      "id": "supabase_db",
+      "type": "database",
+      "label": "Supabase PostgreSQL",
+      "sublabel": "Projetos · Brand Kits",
+      "pos": [385, 430],
+      "size": [150, 60]
+    },
+    {
+      "id": "supabase_storage",
+      "type": "cloud",
+      "label": "Supabase Storage",
+      "sublabel": "brand-assets · content-media",
+      "pos": [560, 430],
+      "size": [155, 60]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Vercel",
+      "wraps": ["nextjs"]
+    },
+    {
+      "kind": "region",
+      "label": "Render",
+      "wraps": ["backend"]
+    },
+    {
+      "kind": "security-group",
+      "label": "Supabase Cloud",
+      "wraps": ["supabase_db", "supabase_storage"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "user-to-nextjs",
+      "from": "user",
+      "to": "nextjs",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "nextjs-to-backend",
+      "from": "nextjs",
+      "to": "backend",
+      "label": "REST API",
+      "variant": "emphasis"
+    },
+    {
+      "id": "backend-to-openai",
+      "from": "backend",
+      "to": "openai",
+      "label": "gpt-4o / DALL-E 3",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "backend-to-meta",
+      "from": "backend",
+      "to": "meta_api",
+      "label": "Graph API v19",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "backend-to-db",
+      "from": "backend",
+      "to": "supabase_db",
+      "label": "SQL",
+      "labelAt": [435, 370],
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "backend-to-storage",
+      "from": "backend",
+      "to": "supabase_storage",
+      "label": "Storage API",
+      "labelDx": -38,
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [[460, 380], [637, 380]]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Páginas (Next.js)",
+      "items": [
+        "/ → Dashboard de projetos",
+        "/create → Gerador com preview",
+        "/settings → Instagram + Brand Kit"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Serviços de IA (OpenAI)",
+      "items": [
+        "gpt-4o → texto (post/carousel/reel)",
+        "DALL-E 3 → imagem por slide",
+        "Vision → extração de identidade visual"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Tabelas Supabase",
+      "items": [
+        "instagram_connections · brand_kits",
+        "brand_assets · content_projects",
+        "content_slides"
+      ]
+    }
+  ]
+}
