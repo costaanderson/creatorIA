@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, BrandKit, BrandKitExtractionResult, BrandKitManualPayload, saveBrandKit } from '../lib/api';
+import { ApiError, BrandKit, BrandKitExtractionResult, BrandKitManualPayload, HashtagPreset, saveBrandKit } from '../lib/api';
 import UploadIdentityForm from './UploadIdentityForm';
 import styles from '../styles/BrandKitForm.module.css';
 
@@ -66,6 +66,8 @@ export default function BrandKitForm({ initialData, onSaved }: Props) {
   );
   const [logoUrl, setLogoUrl] = useState(initialData?.logo_url ?? '');
   const [toneOfVoice, setToneOfVoice] = useState(initialData?.tone_of_voice ?? '');
+  const [niche, setNiche] = useState(initialData?.niche ?? '');
+  const [hashtagPreset, setHashtagPreset] = useState<HashtagPreset>(initialData?.hashtag_preset ?? 'medium');
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -80,6 +82,8 @@ export default function BrandKitForm({ initialData, onSaved }: Props) {
     );
     setLogoUrl(initialData.logo_url ?? '');
     setToneOfVoice(initialData.tone_of_voice ?? '');
+    setNiche(initialData.niche ?? '');
+    setHashtagPreset(initialData.hashtag_preset ?? 'medium');
   }, [initialData]);
 
   // Fill fields from AI extraction
@@ -119,6 +123,8 @@ export default function BrandKitForm({ initialData, onSaved }: Props) {
       secondary_colors: secondaryColors.filter(isValidHex),
       logo_url: logoUrl.trim() || undefined,
       tone_of_voice: toneOfVoice.trim() || undefined,
+      niche: niche.trim() || undefined,
+      hashtag_preset: hashtagPreset,
     };
 
     setSaving(true);
@@ -203,6 +209,25 @@ export default function BrandKitForm({ initialData, onSaved }: Props) {
           </p>
         </div>
 
+        {/* Niche */}
+        <div className={styles.field}>
+          <label className={styles.label}>
+            Nicho / Especialidade{' '}
+            <span style={{ fontWeight: 400, color: '#9ca3af' }}>— opcional</span>
+          </label>
+          <input
+            type="text"
+            className={styles.input}
+            value={niche}
+            onChange={(e) => setNiche(e.target.value)}
+            maxLength={200}
+            placeholder="Ex: Design de sobrancelhas, Maquiagem artística, Fotografia de casamento"
+          />
+          <p className={styles.hint}>
+            A IA usará esse nicho para gerar legendas e hashtags específicas da sua área de atuação.
+          </p>
+        </div>
+
         {/* Tone of voice */}
         <div className={styles.field}>
           <label className={styles.label}>
@@ -219,6 +244,43 @@ export default function BrandKitForm({ initialData, onSaved }: Props) {
           <p className={styles.hint}>
             Descreva a personalidade da marca. A IA usará esse texto para gerar legendas e hashtags no
             estilo certo.
+          </p>
+        </div>
+
+        {/* Hashtag preset */}
+        <div className={styles.field}>
+          <label className={styles.label}>Quantidade de hashtags por post</label>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            {(
+              [
+                { value: 'few',    label: 'Poucas',  range: '3–5'   },
+                { value: 'medium', label: 'Médias',  range: '8–12'  },
+                { value: 'many',   label: 'Muitas',  range: '20–30' },
+              ] as { value: HashtagPreset; label: string; range: string }[]
+            ).map(({ value, label, range }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setHashtagPreset(value)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '0.5rem',
+                  border: hashtagPreset === value ? '2px solid #6366f1' : '2px solid #374151',
+                  background: hashtagPreset === value ? '#1e1b4b' : '#1f2937',
+                  color: hashtagPreset === value ? '#a5b4fc' : '#9ca3af',
+                  cursor: 'pointer',
+                  fontWeight: hashtagPreset === value ? 600 : 400,
+                  fontSize: '0.875rem',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {label}
+                <span style={{ display: 'block', fontSize: '0.75rem', opacity: 0.7 }}>{range} hashtags</span>
+              </button>
+            ))}
+          </div>
+          <p className={styles.hint}>
+            Define quantas hashtags a IA vai gerar. A Bruna prefere poucas — menos trabalho manual depois.
           </p>
         </div>
 

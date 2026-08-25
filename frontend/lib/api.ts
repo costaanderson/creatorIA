@@ -4,6 +4,8 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type HashtagPreset = 'few' | 'medium' | 'many';
+
 export interface BrandKit {
   id?: string;
   user_id?: string;
@@ -11,6 +13,8 @@ export interface BrandKit {
   secondary_colors: string[];
   logo_url?: string;
   tone_of_voice?: string;
+  niche?: string;
+  hashtag_preset?: HashtagPreset;
   visual_style?: string;
   typography_suggestion?: string;
   layout_patterns?: Record<string, unknown>;
@@ -24,6 +28,8 @@ export interface BrandKitManualPayload {
   secondary_colors?: string[];
   logo_url?: string;
   tone_of_voice?: string;
+  niche?: string;
+  hashtag_preset?: HashtagPreset;
 }
 
 export interface BrandKitExtractionResult {

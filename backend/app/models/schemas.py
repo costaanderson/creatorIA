@@ -37,6 +37,11 @@ class BrandKitCreate(BaseModel):
     secondary_colors: Optional[List[str]] = Field(None)
     tone_of_voice: Optional[str] = Field(None)
     logo_url: Optional[str] = Field(None)
+    niche: Optional[str] = Field(None, max_length=200, description="Nicho ou especialidade da conta. Ex: Design de sobrancelhas.")
+    hashtag_preset: Optional[Literal["few", "medium", "many"]] = Field(
+        "medium",
+        description="Quantidade de hashtags: few (3–5), medium (8–12), many (20–30).",
+    )
 
     @field_validator("primary_color")
     @classmethod
@@ -59,6 +64,8 @@ class BrandKitUpdate(BaseModel):
     primary_color: Optional[str] = Field(None, max_length=7)
     secondary_color: Optional[str] = Field(None, max_length=7)
     tone_of_voice: Optional[str] = Field(None, min_length=10)
+    niche: Optional[str] = Field(None, max_length=200)
+    hashtag_preset: Optional[Literal["few", "medium", "many"]] = None
 
     @field_validator("primary_color", "secondary_color")
     @classmethod
@@ -77,6 +84,8 @@ class BrandKitResponse(BaseModel):
     secondary_colors: Optional[List[str]] = None
     tone_of_voice: Optional[str] = None
     logo_url: Optional[str] = None
+    niche: Optional[str] = None
+    hashtag_preset: Optional[str] = "medium"
     created_at: datetime
     updated_at: datetime
 

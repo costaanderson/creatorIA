@@ -49,6 +49,7 @@ _SYSTEM_TEMPLATE = """\
 Você é um copywriter e estrategista de conteúdo especializado em Instagram para criadores de conteúdo e marcas pessoais.
 
 ## Identidade da Marca
+- **Nicho / Especialidade:** {niche}
 - **Cor primária:** {primary_color}
 - **Cor secundária:** {secondary_color}
 - **Tom de voz:** {tone_of_voice}
@@ -61,12 +62,14 @@ Gerar conteúdo para Instagram no formato "{content_type}" sobre o tema fornecid
 1. Responda SOMENTE com um objeto JSON válido. Nenhum texto antes ou depois.
 2. Não use blocos de código markdown (sem ```json). Apenas o JSON puro.
 3. O campo "caption" deve ter no máximo 2.200 caracteres.
-4. O campo "hashtags" deve ser um array de strings, cada uma começando com "#", contendo entre 10 e 30 hashtags.
+4. O campo "caption" deve ser escrito exclusivamente para o nicho "{niche}" — não mencione outros nichos ou áreas não relacionadas.
+5. O campo "hashtags" deve ser um array de strings, cada uma começando com "#", contendo entre {hashtag_min} e {hashtag_max} hashtags.
+   - Todas as hashtags devem ser relevantes para o nicho "{niche}".
    - Misture hashtags de alto alcance (>500k posts), médio (50k–500k) e nicho (<50k).
-5. Cada slide deve ter "title" (máx 60 chars), "body" (máx 300 chars) e "visual_prompt" (máx 500 chars).
-6. O "visual_prompt" deve descrever uma imagem fotorrealista ou gráfica para esse slide,
+6. Cada slide deve ter "title" (máx 60 chars), "body" (máx 300 chars) e "visual_prompt" (máx 500 chars).
+7. O "visual_prompt" deve descrever uma imagem fotorrealista ou gráfica para esse slide,
    incluindo: composição, paleta de cores da marca ({primary_color}), estilo visual, iluminação e elementos visuais.
-7. O tom de voz deve ser fielmente aplicado em todos os textos — caption, títulos e corpos dos slides.
+8. O tom de voz deve ser fielmente aplicado em todos os textos — caption, títulos e corpos dos slides.
 
 ## Estrutura JSON obrigatória
 {{
@@ -82,6 +85,12 @@ Gerar conteúdo para Instagram no formato "{content_type}" sobre o tema fornecid
   ]
 }}
 """
+
+_HASHTAG_RANGES: dict[str, tuple[int, int]] = {
+    "few":    (3,  5),
+    "medium": (8,  12),
+    "many":   (20, 30),
+}
 
 _SINGLE_POST_INSTRUCTION = (
     "Gere exatamente 1 slide. O conteúdo deve ser completo e auto-suficiente como um post único."
@@ -127,7 +136,7 @@ def _fetch_brand_kit(user_id: str) -> dict[str, Any]:
     try:
         result = (
             get_table("brand_kits")
-            .select("primary_color, secondary_color, tone_of_voice, brand_name")
+            .select("primary_color, secondary_color, tone_of_voice, brand_name, niche, hashtag_preset")
             .eq("user_id", user_id)
             .limit(1)
             .execute()
@@ -146,6 +155,8 @@ def _fetch_brand_kit(user_id: str) -> dict[str, Any]:
             "Foco em valor prático para o leitor."
         ),
         "brand_name": None,
+        "niche": None,
+        "hashtag_preset": "medium",
     }
 
 
@@ -164,12 +175,20 @@ def _build_system_prompt(
         slide_instruction = _REEL_INSTRUCTION.format(n=slides_count)
         type_label = f"roteiro de Reel com {slides_count} cenas"
 
+    preset = brand_kit.get("hashtag_preset") or "medium"
+    hashtag_min, hashtag_max = _HASHTAG_RANGES.get(preset, (8, 12))
+
+    niche = brand_kit.get("niche") or "criação de conteúdo para Instagram"
+
     return _SYSTEM_TEMPLATE.format(
+        niche=niche,
         primary_color=brand_kit.get("primary_color") or "#6366F1",
         secondary_color=brand_kit.get("secondary_color") or "#F97316",
         tone_of_voice=brand_kit.get("tone_of_voice") or "Profissional e acessível.",
         content_type=type_label,
         slide_instruction=slide_instruction,
+        hashtag_min=hashtag_min,
+        hashtag_max=hashtag_max,
     )
 
 
