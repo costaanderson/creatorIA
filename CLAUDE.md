@@ -82,18 +82,19 @@ Deploy:    Vercel (frontend) | Render (backend)
 ```
 CreatorAI/
 ├── frontend/                  # Next.js app (TypeScript)
-│   ├── pages/                 # index.tsx ✅ | settings.tsx ✅ | create.tsx ✅
-│   ├── lib/                   # supabaseClient.ts ✅ | api.ts ✅
+│   ├── pages/                 # index.tsx ✅ | settings.tsx ✅ | create.tsx ✅ | login.tsx ✅ | _app.tsx ✅
+│   ├── lib/                   # supabaseClient.ts ✅ | api.ts ✅ | useUser.ts ✅
 │   ├── components/            # InstagramConnectionCard ✅ | BrandKitForm ✅ | UploadIdentityForm ✅
 │   │                          # ContentGeneratorForm ✅ | ContentPreview ✅ | InstagramPreview ✅
+│   │                          # ErrorMessage ✅
 │   └── styles/                # globals.css ✅ | *.module.css por componente ✅
 ├── backend/                   # FastAPI
 │   └── app/
 │       ├── api/routes/        # instagram_auth ✅ | brand_kit ✅ | content ✅ | publish ✅
-│       ├── core/              # config.py ✅ | security.py ✅
+│       ├── core/              # config.py ✅ | security.py ✅ | auth.py ✅
 │       ├── models/            # schemas.py ✅ (auth + brand kit + content + publish)
 │       ├── services/          # meta ✅ | supabase ✅ | brand_extraction_service ✅ | ai_service ✅ | publishing_service ✅ | image_service ✅
-│       ├── sql/               # fase3_content.sql ✅
+│       ├── sql/               # fase3_content.sql ✅ | fase6_rls.sql ✅
 │       └── utils/             # file_validation.py ✅
 ├── render.yaml                # Deploy config — Render (backend)
 ├── frontend/vercel.json       # Deploy config — Vercel (frontend)
@@ -157,7 +158,7 @@ Nomes reais das tabelas — use estes nomes em todo código novo. A tabela `user
 | Tabela | Status | Campos-chave |
 |---|---|---|
 | `instagram_connections` | ✅ existe | user_id, instagram_handle, instagram_user_id, access_token_encrypted, token_expires_at, status |
-| `brand_kits` | ✅ existe (Fase 2) | user_id, primary_color (varchar HEX), secondary_colors (jsonb), logo_url, tone_of_voice, visual_style, typography_suggestion, layout_patterns (jsonb), source (manual\|ai_extracted) |
+| `brand_kits` | ✅ existe (Fase 2) | user_id, primary_color (varchar HEX), secondary_colors (jsonb), logo_url, tone_of_voice, visual_style, typography_suggestion, layout_patterns (jsonb), source (manual\|ai_extracted), niche (varchar), hashtag_preset (few\|medium\|many) |
 | `brand_assets` | ✅ existe (Fase 2) | user_id, brand_kit_id (fk), file_name, file_type, storage_path, storage_url, extracted_metadata (jsonb) |
 | `content_projects` | ✅ existe (Fase 3) | user_id, type (single_post\|carousel\|reel), theme, slides_count, status (draft\|approved\|publishing\|published\|failed\|archived), caption, hashtags (jsonb), instagram_post_url, error_message |
 | `content_slides` | ✅ existe (Fase 3) | content_id (fk → content_projects), slide_order, title, body, visual_prompt, media_url |
@@ -197,7 +198,8 @@ pip freeze > requirements.txt
 ## Detalhes de implementação importantes
 
 - **MVP single-user**: o backend usa `MVP_USER_ID` fixo (env var) em vez de autenticação de sessão — toda operação é feita para esse único usuário.
-- **Limitação arquitetural (alvo da Fase 6)**: o frontend acessa o Supabase diretamente via `supabaseClient.ts` em alguns pontos, bypassando o FastAPI. Em produção multi-usuário, todo acesso a dados deve passar pelo backend (onde o JWT é validado). O RLS do Supabase também não está ativado no MVP — depende do `MVP_USER_ID` como isolamento.
+- **Autenticação Supabase Auth (Fase 6 em andamento)**: `backend/app/core/auth.py` implementa `get_current_user` com suporte a ES256 via JWKS e HS256 legacy como fallback. Frontend tem `pages/login.tsx` (login + signup) e `lib/useUser.ts` (hook de proteção de rota). RLS DDL pronto em `backend/app/sql/fase6_rls.sql` — pendente de ativação no banco.
+- **Limitação arquitetural (alvo da Fase 6)**: o frontend acessa o Supabase diretamente via `supabaseClient.ts` em alguns pontos, bypassando o FastAPI. Em produção multi-usuário, todo acesso a dados deve passar pelo backend (onde o JWT é validado).
 - **Limitação de contas Instagram**: o MVP suporta apenas um perfil Instagram via token fixo no `.env`. A Fase 6 implementa OAuth por usuário com N contas por `user_id`.
 - **Tabela real de conexões**: `instagram_connections` (o PRD menciona `instagram_accounts` — nome desatualizado, ignorar).
 - **Tabela real de conteúdo**: `content_projects` (o PRD menciona `generated_contents` — nome desatualizado, ignorar).
@@ -212,7 +214,12 @@ pip freeze > requirements.txt
 - **Reel**: `content_type = "reel"` gera roteiro com N cenas (3–6). Cada cena tem `title` (nome da cena), `body` (script/o que falar), `visual_prompt` (direção de câmera). Publicação usa `media_type=REELS` na Meta API com polling de até 5 minutos.
 - **Edição de conteúdo**: `PATCH /content/{id}` permite atualizar caption, hashtags e campos de cada slide (title, body, visual_prompt) antes da publicação.
 - **Async publishing**: `publishing_service.py` é totalmente async (`asyncio.sleep` + `httpx.AsyncClient`) — não bloqueia o event loop do FastAPI.
-- **Validação no startup**: `main.py` verifica `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TOKEN_ENCRYPTION_KEY` e `NEXT_PUBLIC_SUPABASE_URL` ao iniciar — falha imediatamente com mensagem clara se alguma estiver ausente.
+- **Validação no startup**: `main.py` verifica `OPENAI_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `TOKEN_ENCRYPTION_KEY`, `NEXT_PUBLIC_SUPABASE_URL` e `SUPABASE_JWT_SECRET` ao iniciar — falha imediatamente com mensagem clara se alguma estiver ausente.
+- **Global exception handler**: `main.py` registra um handler para exceções não tratadas que garante headers CORS presentes em respostas 500, evitando que o browser bloqueie o erro por CORS.
+- **Brand Kit — campos novos**: `niche` (nicho/especialidade da conta, até 200 chars) e `hashtag_preset` (`few` = 3–5, `medium` = 8–12, `many` = 20–30) — usados pelo `ai_service` para calibrar a geração de hashtags.
+- **JWT Middleware**: `backend/app/core/auth.py` — `get_current_user` dependency. Tenta ES256 via JWKS primeiro (`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`); fallback para HS256 com `SUPABASE_JWT_SECRET`. Retorna payload do JWT com `sub` = user_id.
+- **Hook `useUser`**: `frontend/lib/useUser.ts` — verifica sessão ativa via `supabase.auth.getSession()`; redireciona para `/login` se não autenticado. Usar em todas as páginas protegidas.
+- **Componente `ErrorMessage`**: `frontend/components/ErrorMessage.tsx` — exibe erros padronizados com suporte a `onRetry` e `onDismiss`.
 - **requirements.txt**: apenas `backend/requirements.txt` é usado no deploy. O arquivo `requirements.txt` na raiz é um pip freeze de referência local — NÃO é lido pelo Render.
 - **BUG-01 corrigido**: `lib/supabaseClient.ts` criado na Fase 2.
 - **BUG-02 corrigido**: `index.tsx` saneado na Fase 2 — chamada para `/content/` inexistente removida.
@@ -260,6 +267,9 @@ OPENAI_API_KEY=                # API da OpenAI — gpt-4o para geração de text
 # CORS (produção)
 ALLOWED_ORIGINS=               # ex: https://creatorai.vercel.app,https://www.seudominio.com
                                # (vazio = usa padrão http://localhost:3000)
+
+# Autenticação JWT (Supabase Auth — Fase 6)
+SUPABASE_JWT_SECRET=           # Project Settings → API → JWT Secret — obrigatório no startup
 ```
 
 ---
@@ -330,7 +340,7 @@ ALLOWED_ORIGINS=               # ex: https://creatorai.vercel.app,https://www.se
 | Fase 3 — Geração de Conteúdo | Tabelas `content_projects`/`content_slides`, endpoints `/content/*`, pipeline OpenAI | ✅ Concluída (backend + frontend) |
 | Fase 4 — Publicação | `POST /instagram/publish/{id}`, token direto do `.env`, botão no frontend | ✅ Concluída |
 | Fase 5 — Qualidade + Reels + Imagens | Correções de performance (async, N+1, singleton), suporte a Reel, DALL-E 3 por slide | ✅ Concluída |
-| Fase 6 — Multi-usuário | Supabase Auth, JWT Middleware, RLS, N contas Instagram por usuário | 🔜 Planejado |
+| Fase 6 — Multi-usuário | Supabase Auth, JWT Middleware, RLS, N contas Instagram por usuário | 🔄 Em andamento |
 
 ---
 
@@ -347,7 +357,7 @@ ALLOWED_ORIGINS=               # ex: https://creatorai.vercel.app,https://www.se
 - [x] `utils/file_validation.py`: valida extensão (PNG, JPG, SVG, PDF), MIME type e tamanho ≤ 10 MB
 - [x] `services/brand_extraction_service.py`: chama OpenAI gpt-4o Vision; retorna JSON de identidade visual
 - [x] `api/routes/brand_kit.py`: `GET /brand-kit`, `POST /brand-kit`, `POST /brand-kit/upload`
-- [x] Schemas Pydantic em `models/schemas.py`: `BrandKitResponse`, `BrandKitManualPayload`, `BrandKitUploadResponse`
+- [x] Schemas Pydantic em `models/schemas.py`: `BrandKitCreate` (com `niche` e `hashtag_preset`), `BrandKitUpdate`, `BrandKitResponse`, `BrandKitExtractionResponse`, `BrandKitUploadResponse`
 - [x] Router `brand_kit` registrado em `main.py`
 
 ### Frontend ✅
@@ -507,3 +517,22 @@ SUPABASE_JWT_SECRET=   # em Project Settings → API → JWT Secret (Supabase da
 - Estrutura de rotas do FastAPI
 - Deploy no Vercel + Render
 - Nenhuma tabela precisa ser recriada
+
+---
+
+## Fase 6 — Progresso atual 🔄
+
+### Concluído ✅
+
+- [x] `backend/app/core/auth.py`: dependency `get_current_user` — valida JWT ES256 via JWKS + HS256 fallback
+- [x] `frontend/pages/login.tsx`: página de login e signup combinada (email + senha via Supabase Auth)
+- [x] `frontend/lib/useUser.ts`: hook de proteção de rota — redireciona para `/login` se não autenticado
+- [x] `backend/app/sql/fase6_rls.sql`: DDL de RLS para todas as 5 tabelas (`instagram_connections`, `brand_kits`, `brand_assets`, `content_projects`, `content_slides`)
+- [x] `SUPABASE_JWT_SECRET` adicionada ao `config.py` e às env vars obrigatórias no startup
+
+### Pendente ⏳
+
+- [ ] Injetar `Depends(get_current_user)` em todas as rotas (substituindo `MVP_USER_ID` fixo)
+- [ ] Executar `fase6_rls.sql` no Supabase para ativar o RLS no banco
+- [ ] Refatorar frontend para passar `Authorization: Bearer <jwt>` em cada request ao backend
+- [ ] Migrar OAuth Instagram para associar token ao `user_id` da sessão autenticada
